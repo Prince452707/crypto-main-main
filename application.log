@@ -1,0 +1,10 @@
+2025-06-16T01:16:24.979+05:30  INFO 26424 --- [crypto-insight] [main] c.i.crypto.CryptoInsightApplication      : Starting CryptoInsightApplication using Java 17.0.11 with PID 26424 (D:\programs\crypto-main-main\target\classes started by prince kumar in D:\programs\crypto-main-main)
+2025-06-16T01:16:24.999+05:30 DEBUG 26424 --- [crypto-insight] [main] c.i.crypto.CryptoInsightApplication      : Running with Spring Boot v3.2.3, Spring v6.1.4
+2025-06-16T01:16:25.001+05:30  INFO 26424 --- [crypto-insight] [main] c.i.crypto.CryptoInsightApplication      : No active profile set, falling back to 1 default profile: "default"
+2025-06-16T01:16:30.825+05:30  INFO 26424 --- [crypto-insight] [main] c.insight.crypto.service.AIService       : AIService initialized with model: tinyllama:1.1b
+2025-06-16T01:16:30.990+05:30 DEBUG 26424 --- [crypto-insight] [main] s.w.r.r.m.a.RequestMappingHandlerMapping : 11 mappings in 'requestMappingHandlerMapping'
+2025-06-16T01:16:33.918+05:30  INFO 26424 --- [crypto-insight] [main] o.s.b.a.e.web.EndpointLinksResolver      : Exposing 26 endpoint(s) beneath base path '/actuator'
+2025-06-16T01:16:34.124+05:30 DEBUG 26424 --- [crypto-insight] [main] o.s.w.r.r.m.a.ControllerMethodResolver   : ControllerAdvice beans: 0 @ModelAttribute, 0 @InitBinder, 1 @ExceptionHandler
+2025-06-16T01:16:34.342+05:30 DEBUG 26424 --- [crypto-insight] [main] o.s.w.s.adapter.HttpWebHandlerAdapter    : enableLoggingRequestDetails='false': form data and headers will be masked to prevent unsafe logging of potentially sensitive data
+2025-06-16T01:16:35.305+05:30  INFO 26424 --- [crypto-insight] [main] o.s.b.web.embedded.netty.NettyWebServer  : Netty started on port 8081
+2025-06-16T01:16:35.328+05:30  INFO 26424 --- [crypto-insight] [main] c.i.crypto.CryptoInsightApplication      : Started CryptoInsightApplication in 11.01 seconds (process running for 11.809)
