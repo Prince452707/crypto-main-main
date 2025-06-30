@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Backend Connection Test</title>
+</head>
+<body>
+    <h1>Backend Connection Test</h1>
+    <button onclick="testConnection()">Test Backend Connection</button>
+    <div id="result"></div>
+
+    <script>
+        async function testConnection() {
+            const resultDiv = document.getElementById('result');
+            resultDiv.innerHTML = 'Testing...';
+            
+            try {
+                const response = await fetch('http://localhost:8081/api/v1/crypto/market-data?page=1&perPage=5');
+                const data = await response.json();
+                
+                if (response.ok) {
+                    resultDiv.innerHTML = `<h3>✅ Success!</h3><pre>${JSON.stringify(data, null, 2)}</pre>`;
+                } else {
+                    resultDiv.innerHTML = `<h3>❌ Error ${response.status}</h3><pre>${JSON.stringify(data, null, 2)}</pre>`;
+                }
+            } catch (error) {
+                resultDiv.innerHTML = `<h3>❌ Connection Error</h3><p>${error.message}</p>`;
+            }
+        }
+    </script>
+</body>
+</html>

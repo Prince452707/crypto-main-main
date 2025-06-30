@@ -1,0 +1,385 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Backend Feature Test Suite</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .test-section { margin: 20px 0; padding: 15px; border: 1px solid #ddd; border-radius: 5px; }
+        .success { background-color: #d4edda; border-color: #c3e6cb; }
+        .error { background-color: #f8d7da; border-color: #f5c6cb; }
+        .info { background-color: #d1ecf1; border-color: #bee5eb; }
+        button { margin: 5px; padding: 10px 15px; cursor: pointer; }
+        pre { background: #f8f9fa; padding: 10px; border-radius: 3px; overflow-x: auto; }
+        .test-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 15px; }
+    </style>
+</head>
+<body>
+    <h1>🚀 Crypto Insight Backend Feature Test Suite</h1>
+    <p>Testing all backend capabilities to ensure frontend can fully utilize them.</p>
+
+    <div class="test-grid">
+        <!-- Market Data Test -->
+        <div class="test-section info" id="market-test">
+            <h3>📊 Market Data Test</h3>
+            <button onclick="testMarketData()">Test Market Data</button>
+            <div id="market-result"></div>
+        </div>
+
+        <!-- Search Test -->
+        <div class="test-section info" id="search-test">
+            <h3>🔍 Search Test</h3>
+            <input type="text" id="search-input" placeholder="Enter crypto symbol (e.g., BTC)" value="bitcoin">
+            <button onclick="testSearch()">Test Search</button>
+            <div id="search-result"></div>
+        </div>
+
+        <!-- Crypto Details Test -->
+        <div class="test-section info" id="details-test">
+            <h3>📋 Crypto Details Test</h3>
+            <input type="text" id="details-input" placeholder="Enter crypto ID" value="bitcoin">
+            <button onclick="testCryptoDetails()">Test Details</button>
+            <div id="details-result"></div>
+        </div>
+
+        <!-- Price Chart Test -->
+        <div class="test-section info" id="chart-test">
+            <h3>📈 Price Chart Test</h3>
+            <input type="text" id="chart-input" placeholder="Enter symbol" value="BTC">
+            <select id="chart-days">
+                <option value="7">7 days</option>
+                <option value="30" selected>30 days</option>
+                <option value="90">90 days</option>
+            </select>
+            <button onclick="testPriceChart()">Test Chart</button>
+            <div id="chart-result"></div>
+        </div>
+
+        <!-- AI Analysis Test -->
+        <div class="test-section info" id="ai-test">
+            <h3>🤖 AI Analysis Test</h3>
+            <input type="text" id="ai-input" placeholder="Enter symbol" value="BTC">
+            <select id="ai-days">
+                <option value="7">7 days</option>
+                <option value="30" selected>30 days</option>
+                <option value="90">90 days</option>
+            </select>
+            <button onclick="testAIAnalysis()">Test AI Analysis</button>
+            <div id="ai-result"></div>
+        </div>
+
+        <!-- Health Check Test -->
+        <div class="test-section info" id="health-test">
+            <h3>❤️ Health Check Test</h3>
+            <button onclick="testHealthCheck()">Test Health</button>
+            <div id="health-result"></div>
+        </div>
+
+        <!-- Performance Metrics Test -->
+        <div class="test-section info" id="metrics-test">
+            <h3>⚡ Performance Metrics Test</h3>
+            <button onclick="testMetrics()">Test Metrics</button>
+            <div id="metrics-result"></div>
+        </div>
+
+        <!-- CORS Test -->
+        <div class="test-section info" id="cors-test">
+            <h3>🌐 CORS Test</h3>
+            <button onclick="testCORS()">Test CORS</button>
+            <div id="cors-result"></div>
+        </div>
+    </div>
+
+    <div class="test-section info">
+        <h3>📊 Test Summary</h3>
+        <div id="test-summary">Click "Run All Tests" to see overall results</div>
+        <button onclick="runAllTests()" style="background: #007bff; color: white; font-size: 16px; padding: 15px 30px;">🚀 Run All Tests</button>
+    </div>
+
+    <script>
+        const BASE_URL = 'http://localhost:8081/api/v1';
+        let testResults = {};
+
+        async function makeRequest(url, testName) {
+            const startTime = Date.now();
+            try {
+                const response = await fetch(url);
+                const data = await response.json();
+                const duration = Date.now() - startTime;
+                
+                testResults[testName] = {
+                    success: response.ok,
+                    status: response.status,
+                    duration: duration,
+                    data: data
+                };
+                
+                return { response, data, duration };
+            } catch (error) {
+                const duration = Date.now() - startTime;
+                testResults[testName] = {
+                    success: false,
+                    error: error.message,
+                    duration: duration
+                };
+                throw error;
+            }
+        }
+
+        async function testMarketData() {
+            const resultDiv = document.getElementById('market-result');
+            resultDiv.innerHTML = 'Testing...';
+            
+            try {
+                const { response, data, duration } = await makeRequest(
+                    `${BASE_URL}/crypto/market-data?page=1&perPage=10`,
+                    'market-data'
+                );
+                
+                if (response.ok && data.success) {
+                    resultDiv.innerHTML = `
+                        <div class="success">
+                            ✅ Market Data: Success (${duration}ms)<br>
+                            📊 Loaded ${data.data.length} cryptocurrencies<br>
+                            🔧 Metadata: ${JSON.stringify(data.metadata || {}).substring(0, 100)}...
+                        </div>
+                    `;
+                } else {
+                    throw new Error(`Status: ${response.status}`);
+                }
+            } catch (error) {
+                resultDiv.innerHTML = `<div class="error">❌ Market Data Failed: ${error.message}</div>`;
+            }
+        }
+
+        async function testSearch() {
+            const query = document.getElementById('search-input').value;
+            const resultDiv = document.getElementById('search-result');
+            resultDiv.innerHTML = 'Testing...';
+            
+            try {
+                const { response, data, duration } = await makeRequest(
+                    `${BASE_URL}/crypto/search/${query}?limit=5`,
+                    'search'
+                );
+                
+                if (response.ok && data.success) {
+                    resultDiv.innerHTML = `
+                        <div class="success">
+                            ✅ Search: Success (${duration}ms)<br>
+                            🔍 Found ${data.data.length} results for "${query}"<br>
+                            📝 Sample: ${JSON.stringify(data.data[0] || {}).substring(0, 100)}...
+                        </div>
+                    `;
+                } else {
+                    throw new Error(`Status: ${response.status}`);
+                }
+            } catch (error) {
+                resultDiv.innerHTML = `<div class="error">❌ Search Failed: ${error.message}</div>`;
+            }
+        }
+
+        async function testCryptoDetails() {
+            const id = document.getElementById('details-input').value;
+            const resultDiv = document.getElementById('details-result');
+            resultDiv.innerHTML = 'Testing...';
+            
+            try {
+                const { response, data, duration } = await makeRequest(
+                    `${BASE_URL}/crypto/details/${id}`,
+                    'details'
+                );
+                
+                if (response.ok && data.success) {
+                    resultDiv.innerHTML = `
+                        <div class="success">
+                            ✅ Details: Success (${duration}ms)<br>
+                            💰 Price: $${data.data.price || 'N/A'}<br>
+                            📊 Market Cap: $${data.data.marketCap || 'N/A'}
+                        </div>
+                    `;
+                } else {
+                    throw new Error(`Status: ${response.status}`);
+                }
+            } catch (error) {
+                resultDiv.innerHTML = `<div class="error">❌ Details Failed: ${error.message}</div>`;
+            }
+        }
+
+        async function testPriceChart() {
+            const symbol = document.getElementById('chart-input').value;
+            const days = document.getElementById('chart-days').value;
+            const resultDiv = document.getElementById('chart-result');
+            resultDiv.innerHTML = 'Testing...';
+            
+            try {
+                const { response, data, duration } = await makeRequest(
+                    `${BASE_URL}/crypto/price-chart/${symbol}?days=${days}`,
+                    'price-chart'
+                );
+                
+                if (response.ok && data.success) {
+                    resultDiv.innerHTML = `
+                        <div class="success">
+                            ✅ Price Chart: Success (${duration}ms)<br>
+                            📈 Chart Points: ${data.data.length}<br>
+                            📅 Time Range: ${days} days
+                        </div>
+                    `;
+                } else {
+                    throw new Error(`Status: ${response.status}`);
+                }
+            } catch (error) {
+                resultDiv.innerHTML = `<div class="error">❌ Chart Failed: ${error.message}</div>`;
+            }
+        }
+
+        async function testAIAnalysis() {
+            const symbol = document.getElementById('ai-input').value;
+            const days = document.getElementById('ai-days').value;
+            const resultDiv = document.getElementById('ai-result');
+            resultDiv.innerHTML = 'Testing AI Analysis (this may take longer)...';
+            
+            try {
+                const { response, data, duration } = await makeRequest(
+                    `${BASE_URL}/crypto/analysis/${symbol}?days=${days}`,
+                    'ai-analysis'
+                );
+                
+                if (response.ok && data.success) {
+                    const analysis = data.data.analysis || {};
+                    const keys = Object.keys(analysis);
+                    resultDiv.innerHTML = `
+                        <div class="success">
+                            ✅ AI Analysis: Success (${duration}ms)<br>
+                            🤖 Analysis Sections: ${keys.length}<br>
+                            📊 Sample: ${JSON.stringify(analysis).substring(0, 150)}...
+                        </div>
+                    `;
+                } else {
+                    throw new Error(`Status: ${response.status}`);
+                }
+            } catch (error) {
+                resultDiv.innerHTML = `<div class="error">❌ AI Analysis Failed: ${error.message}</div>`;
+            }
+        }
+
+        async function testHealthCheck() {
+            const resultDiv = document.getElementById('health-result');
+            resultDiv.innerHTML = 'Testing...';
+            
+            try {
+                const { response, data, duration } = await makeRequest(
+                    'http://localhost:8081/actuator/health',
+                    'health'
+                );
+                
+                if (response.ok) {
+                    resultDiv.innerHTML = `
+                        <div class="success">
+                            ✅ Health Check: Success (${duration}ms)<br>
+                            💚 Status: ${data.status || 'UP'}<br>
+                        </div>
+                    `;
+                } else {
+                    throw new Error(`Status: ${response.status}`);
+                }
+            } catch (error) {
+                resultDiv.innerHTML = `<div class="error">❌ Health Check Failed: ${error.message}</div>`;
+            }
+        }
+
+        async function testMetrics() {
+            const resultDiv = document.getElementById('metrics-result');
+            resultDiv.innerHTML = 'Testing...';
+            
+            try {
+                const { response, data, duration } = await makeRequest(
+                    'http://localhost:8081/actuator/metrics',
+                    'metrics'
+                );
+                
+                if (response.ok) {
+                    resultDiv.innerHTML = `
+                        <div class="success">
+                            ✅ Metrics: Success (${duration}ms)<br>
+                            📊 Available Metrics: ${data.names ? data.names.length : 'Available'}<br>
+                        </div>
+                    `;
+                } else {
+                    throw new Error(`Status: ${response.status}`);
+                }
+            } catch (error) {
+                resultDiv.innerHTML = `<div class="error">❌ Metrics Failed: ${error.message}</div>`;
+            }
+        }
+
+        async function testCORS() {
+            const resultDiv = document.getElementById('cors-result');
+            resultDiv.innerHTML = 'Testing...';
+            
+            try {
+                const response = await fetch(`${BASE_URL}/crypto/market-data?page=1&perPage=1`, {
+                    method: 'GET',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Origin': 'http://localhost:3000'
+                    }
+                });
+                
+                if (response.ok) {
+                    resultDiv.innerHTML = `
+                        <div class="success">
+                            ✅ CORS: Properly Configured<br>
+                            🌐 Cross-origin requests work<br>
+                            🔧 Status: ${response.status}
+                        </div>
+                    `;
+                } else {
+                    throw new Error(`Status: ${response.status}`);
+                }
+            } catch (error) {
+                resultDiv.innerHTML = `<div class="error">❌ CORS Failed: ${error.message}</div>`;
+            }
+        }
+
+        async function runAllTests() {
+            document.getElementById('test-summary').innerHTML = 'Running all tests...';
+            testResults = {};
+            
+            const tests = [
+                testMarketData,
+                testSearch,
+                testCryptoDetails,
+                testPriceChart,
+                testAIAnalysis,
+                testHealthCheck,
+                testMetrics,
+                testCORS
+            ];
+            
+            for (const test of tests) {
+                await test();
+                await new Promise(resolve => setTimeout(resolve, 500)); // Small delay between tests
+            }
+            
+            // Generate summary
+            const totalTests = Object.keys(testResults).length;
+            const passedTests = Object.values(testResults).filter(r => r.success).length;
+            const avgDuration = Object.values(testResults).reduce((sum, r) => sum + r.duration, 0) / totalTests;
+            
+            const summaryDiv = document.getElementById('test-summary');
+            summaryDiv.innerHTML = `
+                <div class="${passedTests === totalTests ? 'success' : 'error'}">
+                    <h4>🎯 Test Results Summary</h4>
+                    ✅ Passed: ${passedTests}/${totalTests} tests<br>
+                    ⏱️ Average Response Time: ${Math.round(avgDuration)}ms<br>
+                    📊 Success Rate: ${Math.round((passedTests/totalTests) * 100)}%<br>
+                    ${passedTests === totalTests ? 
+                        '🎉 All backend features are working! Frontend can fully utilize backend capabilities.' : 
+                        '⚠️ Some features need attention. Check individual test results.'}
+                </div>
+            `;
+        }
+    </script>
+</body>
+</html>

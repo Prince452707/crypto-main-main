@@ -13,6 +13,7 @@ import java.util.List;
 @Slf4j
 @RestController
 @RequestMapping("/api/v1")
+@CrossOrigin(originPatterns = "*")
 public class CryptoApiController {
 
     public CryptoApiController(ApiService apiService) {
@@ -21,9 +22,9 @@ public class CryptoApiController {
 
     private final ApiService apiService;
 
-    @GetMapping("/search")
+    @GetMapping("/crypto/search/{query}")
     public Mono<ResponseEntity<ApiResponse<List<Cryptocurrency>>>> searchCryptocurrencies(
-            @RequestParam String query,
+            @PathVariable String query,
             @RequestParam(defaultValue = "10") int limit) {
         return apiService.searchCryptocurrencies(query)
                 .collectList()
@@ -40,7 +41,7 @@ public class CryptoApiController {
                 });
     }
 
-    @GetMapping("/market-data")
+    @GetMapping("/crypto/market-data")
     public Mono<ResponseEntity<ApiResponse<List<Cryptocurrency>>>> getMarketData(
             @RequestParam(defaultValue = "1") int page,
             @RequestParam(defaultValue = "50") int perPage) {
@@ -62,7 +63,7 @@ public class CryptoApiController {
                 });
     }
 
-    @GetMapping("/{symbol}")
+    @GetMapping("/crypto/{symbol}")
     public Mono<ResponseEntity<ApiResponse<Cryptocurrency>>> getCryptocurrency(
             @PathVariable String symbol,
             @RequestParam(defaultValue = "30") int days) {
@@ -76,7 +77,7 @@ public class CryptoApiController {
                 });
     }
 
-    @GetMapping("/{symbol}/market-chart")
+    @GetMapping("/crypto/{symbol}/market-chart")
     public Mono<ResponseEntity<ApiResponse<List<List<Number>>>>> getMarketChart(
             @PathVariable String symbol,
             @RequestParam(defaultValue = "30") int days) {
@@ -94,7 +95,7 @@ public class CryptoApiController {
                 });
     }
 
-    @GetMapping("/{symbol}/details")
+    @GetMapping("/crypto/{symbol}/details")
     public Mono<ResponseEntity<ApiResponse<CryptoDetails>>> getCryptoDetails(
             @PathVariable String symbol,
             @RequestParam(defaultValue = "30") int days) {
@@ -115,49 +116,35 @@ public class CryptoApiController {
                 });
     }
 
-//    @GetMapping("/{symbol}/analysis")
-//    public Mono<ResponseEntity<ApiResponse<AnalysisResponse>>> getAnalysis(
-//            @PathVariable String symbol,
-//            @RequestParam(defaultValue = "30") int days) {
-//                return apiService.getCryptocurrencyData(symbol)
-//                .<AnalysisResponse>flatMap(crypto -> {
-//                    Mono<List<ChartDataPoint>> chartDataMono = apiService.getMarketChart(symbol, days)
-//                            .map(chartData -> 
-//                                chartData != null ?
-//                                chartData.stream()
-//                                        .map(point -> new ChartDataPoint(
-//                                                ((Number) point.get(0)).longValue(),
-//                                                ((Number) point.get(1)).doubleValue()
-//                                        ))
-//                                        .toList() :
-//                                List.<ChartDataPoint>of()
-//                            );
-//                    
-//                    Mono<Map<String, String>> combinedDataMono = apiService.getCombinedCryptoData(crypto.getSymbol(), crypto.getId())
-//                            .flatMap(combinedData -> {
-//                                if (combinedData != null && !combinedData.isEmpty()) {
-//                                    // Convert List<Map<String, String>> to Map<String, String>
-//                                    Map<String, String> result = new HashMap<>();
-//                                    combinedData.get(0).forEach(result::put);
-//                                    return Mono.just(result);
-//                                }
-//                                return Mono.just(Collections.emptyMap());
-//                            });
-//
-//                    Mono<AnalysisResponse> analysisMono = chartDataMono.zipWith(combinedDataMono, (chartData, analysisData) ->
-//                            AnalysisResponse.builder()
-//                                    .chartData(chartData)
-//                                    .analysis(analysisData)
-//                                    .build()
-//                    );
-//                    return analysisMono;
-//                })
-//                .map(analysis -> ResponseEntity.ok(ApiResponse.success(analysis, "Analysis completed successfully")))
-//                .switchIfEmpty(Mono.just(ResponseEntity.notFound().build()))
-//                .onErrorResume(e -> {
-//                    log.error("Error in analysis for {}: {}", symbol, e.getMessage(), e);
-//                    return Mono.just(ResponseEntity.badRequest()
-//                            .body(ApiResponse.<AnalysisResponse>error("Error in analysis: " + e.getMessage())));
-//                });
-//    }
+    @GetMapping("/crypto/details/{symbol}")
+    public Mono<ResponseEntity<ApiResponse<Cryptocurrency>>> getCryptocurrencyDetails(
+            @PathVariable String symbol) {
+        return apiService.getCryptocurrencyDetails(symbol)
+                .map(crypto -> ResponseEntity.ok(ApiResponse.success(crypto, "Cryptocurrency details fetched successfully")))
+                .switchIfEmpty(Mono.just(ResponseEntity.notFound().build()))
+                .onErrorResume(e -> {
+                    log.error("Error fetching cryptocurrency details for {}: {}", symbol, e.getMessage(), e);
+                    return Mono.just(ResponseEntity.badRequest()
+                            .body(ApiResponse.error("Error fetching cryptocurrency details: " + e.getMessage())));
+                });
+    }
+
+    @GetMapping("/crypto/price-chart/{symbol}")
+    public Mono<ResponseEntity<ApiResponse<List<List<Number>>>>> getPriceChart(
+            @PathVariable String symbol,
+            @RequestParam(defaultValue = "30") int days) {
+        return apiService.getMarketChart(symbol, days)
+                .map(chartData -> {
+                    Object pricesObj = chartData.get("prices");
+                    @SuppressWarnings("unchecked")
+                    List<List<Number>> prices = pricesObj instanceof List ? (List<List<Number>>) pricesObj : List.of();
+                    return ResponseEntity.ok(ApiResponse.success(prices, "Price chart data fetched successfully"));
+                })
+                .onErrorResume(e -> {
+                    log.error("Error fetching price chart for {}: {}", symbol, e.getMessage(), e);
+                    return Mono.just(ResponseEntity.badRequest()
+                            .body(ApiResponse.error("Error fetching price chart: " + e.getMessage())));
+                });
+    }
+
 }

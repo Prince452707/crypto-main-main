@@ -15,7 +15,7 @@ public class GlobalCorsConfig {
     public CorsWebFilter corsWebFilter() {
         CorsConfiguration config = new CorsConfiguration();
         
-        // Allow all origins for development
+        // Allow all origin patterns for development
         config.setAllowedOriginPatterns(Arrays.asList("*"));
         
         // Allow all methods

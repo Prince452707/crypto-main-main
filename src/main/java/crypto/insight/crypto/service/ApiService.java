@@ -6,7 +6,6 @@ import crypto.insight.crypto.model.CryptoIdentity;
 import crypto.insight.crypto.model.Cryptocurrency;
 import crypto.insight.crypto.service.provider.DataProvider;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.cache.Cache;
 import org.springframework.core.ParameterizedTypeReference;
 import org.springframework.http.HttpStatus;
@@ -36,7 +35,6 @@ public class ApiService {
     private final WebClient webClient;
     private final ApiProperties apiProperties;
 
-    @Autowired
     public ApiService(List<DataProvider> dataProviders, 
                      @org.springframework.beans.factory.annotation.Qualifier("identityCache") Cache identityCache,
                      @org.springframework.beans.factory.annotation.Qualifier("webClient") WebClient webClient,
@@ -129,7 +127,7 @@ public class ApiService {
                 .marketCap(cryptoData.getMarketCap())
                 .volume24h(cryptoData.getVolume24h())
                 .percentChange24h(cryptoData.getPercentChange24h())
-                .image(cryptoData.getImageUrl())
+                .imageUrl(cryptoData.getImageUrl())
                 .rank(cryptoData.getMarketCapRank() != null ? cryptoData.getMarketCapRank().intValue() : 0)
                 .circulatingSupply(cryptoData.getCirculatingSupply())
                 .totalSupply(cryptoData.getTotalSupply())
@@ -324,7 +322,7 @@ public class ApiService {
                         .id(safeString(coin.get("id")))
                         .name(safeString(coin.get("name")))
                         .symbol(safeString(coin.get("symbol")).toUpperCase())
-                        .image(safeString(coin.get("large")))
+                        .imageUrl(safeString(coin.get("large")))
                         .rank(safeInteger(coin.get("market_cap_rank")))
                         .build())
                 .collect(Collectors.toList());
@@ -373,7 +371,7 @@ public class ApiService {
                                 .marketCap(safeBigDecimal(market.get("market_cap")))
                                 .volume24h(safeBigDecimal(market.get("total_volume")))
                                 .percentChange24h(safeBigDecimal(market.get("price_change_percentage_24h")))
-                                .image(safeString(market.get("image")))
+                                .imageUrl(safeString(market.get("image")))
                                 .rank(safeInteger(market.get("market_cap_rank")))
                                 .circulatingSupply(safeBigDecimal(market.get("circulating_supply")))
                                 .totalSupply(safeBigDecimal(market.get("total_supply")))
@@ -421,7 +419,7 @@ public class ApiService {
                 .id(safeString(data.get("id")))
                 .symbol(safeString(data.get("symbol")).toUpperCase())
                 .name(safeString(data.get("name")))
-                .image(safeString(imageData.get("large")))
+                .imageUrl(safeString(imageData.get("large")))
                 .price(safeBigDecimal(currentPrice.get("usd")))
                 .marketCap(safeBigDecimal(marketCap.get("usd")))
                 .volume24h(safeBigDecimal(totalVolume.get("usd")))
