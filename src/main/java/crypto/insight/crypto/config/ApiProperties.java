@@ -26,6 +26,10 @@ public class ApiProperties {
         private String key;
         private String baseUrl = "https://min-api.cryptocompare.com/data";
         private int rateLimitPerMinute = 30; // Default rate limit
+        
+        public String getCryptoCompareBaseUrl() {
+            return baseUrl != null ? baseUrl : "https://min-api.cryptocompare.com/data";
+        }
     }
 
     /**

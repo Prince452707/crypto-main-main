@@ -1,0 +1,60 @@
+name: crypto_insight_web
+description: Professional Crypto Insight Platform - Flutter Web Application
+version: 1.0.0+1
+
+environment:
+  sdk: '>=3.0.0 <4.0.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+  
+  # HTTP client for API calls
+  http: ^1.1.0
+  
+  # State management
+  provider: ^6.1.1
+  
+  # Routing
+  go_router: ^12.1.3
+  
+  # UI Components
+  flutter_svg: ^2.0.9
+  google_fonts: ^6.1.0
+  
+  # Charts and Data Visualization
+  fl_chart: ^0.65.0
+  syncfusion_flutter_charts: ^24.1.41
+  
+  # Animations
+  lottie: ^2.7.0
+  animated_text_kit: ^4.2.2
+  
+  # Utilities
+  intl: ^0.19.0
+  shared_preferences: ^2.2.2
+  url_launcher: ^6.2.2
+  
+  # Icons
+  cupertino_icons: ^1.0.6
+  font_awesome_flutter: ^10.6.0
+  
+  # Loading and Progress
+  shimmer: ^3.0.0
+  loading_animation_widget: ^1.2.0+4
+  
+  # Data formatting
+  decimal: ^2.3.3
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^3.0.0
+
+flutter:
+  uses-material-design: true
+  
+  assets:
+    - assets/images/
+    - assets/animations/
+    - assets/icons/

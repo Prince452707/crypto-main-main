@@ -27,6 +27,7 @@ public class CryptoIdentity implements Serializable {
     private String coingeckoId;
     private String coinmarketcapId;
     private String cryptocompareId;
+    private String coinpaprikaId;
     
     // Additional potential symbols for fuzzy matching
     private Set<String> potentialSymbols = new HashSet<>();
@@ -47,6 +48,7 @@ public class CryptoIdentity implements Serializable {
         if (other.getCoingeckoId() != null) this.coingeckoId = other.getCoingeckoId();
         if (other.getCoinmarketcapId() != null) this.coinmarketcapId = other.getCoinmarketcapId();
         if (other.getCryptocompareId() != null) this.cryptocompareId = other.getCryptocompareId();
+        if (other.getCoinpaprikaId() != null) this.coinpaprikaId = other.getCoinpaprikaId();
         
         if (other.getPotentialSymbols() != null) {
             this.potentialSymbols.addAll(other.getPotentialSymbols());
@@ -57,7 +59,7 @@ public class CryptoIdentity implements Serializable {
      * Checks if this identity has been resolved to at least one provider.
      */
     public boolean isResolved() {
-        return coingeckoId != null || coinmarketcapId != null || cryptocompareId != null;
+        return coingeckoId != null || coinmarketcapId != null || cryptocompareId != null || coinpaprikaId != null;
     }
     
     // Backward compatibility getters

@@ -2,6 +2,7 @@ package crypto.insight.crypto.model;
 
 import lombok.Builder;
 import lombok.Data;
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
 
@@ -35,4 +36,19 @@ public class AnalysisResponse {
      * News data related to the cryptocurrency
      */
     private List<Map<String, String>> newsData;
+    
+    /**
+     * Timestamp of the analysis
+     */
+    private LocalDateTime timestamp;
+    
+    /**
+     * Timestamp when the analysis was generated
+     */
+    private LocalDateTime analysisTimestamp;
+    
+    /**
+     * Timestamp when the underlying data was last updated
+     */
+    private LocalDateTime dataTimestamp;
 }

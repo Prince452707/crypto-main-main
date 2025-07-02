@@ -72,7 +72,11 @@ public class WebClientConfig {
 
     @Bean("ollamaWebClient")
     public WebClient ollamaWebClient() {
+        HttpClient httpClient = HttpClient.create()
+                .responseTimeout(Duration.ofSeconds(120)); // Increased timeout for AI operations
+
         return WebClient.builder()
+                .clientConnector(new ReactorClientHttpConnector(httpClient))
                 .baseUrl("http://localhost:11434")
                 .defaultHeader(HttpHeaders.CONTENT_TYPE, MediaType.APPLICATION_JSON_VALUE)
                 .defaultHeader(HttpHeaders.ACCEPT, MediaType.APPLICATION_JSON_VALUE)

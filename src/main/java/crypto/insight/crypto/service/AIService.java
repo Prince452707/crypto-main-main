@@ -1,7 +1,6 @@
 package crypto.insight.crypto.service;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.MediaType;
 import org.springframework.stereotype.Service;
@@ -18,7 +17,6 @@ import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.util.concurrent.CompletableFuture;
 import java.util.stream.Collectors;
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import jakarta.annotation.PostConstruct;
 import crypto.insight.crypto.model.AnalysisResponse;
@@ -31,7 +29,6 @@ import crypto.insight.crypto.model.Cryptocurrency;
  */
 @Slf4j
 @Service
-@RequiredArgsConstructor
 public class AIService {
     
     // Constants
@@ -39,29 +36,55 @@ public class AIService {
     private static final int PRECISION_SCALE = 6;
     private static final int ANNUALIZATION_DAYS = 365;
     private static final String OLLAMA_API_URL = "http://localhost:11434/api/chat";
-    private static final int MAX_RETRIES = 2;
+    private static final int MAX_RETRIES = 3;
     private static final String DEFAULT_VALUE = "N/A";
-    private static final int MAX_TOKENS = 2000; // Increased token limit for more complete responses
+    private static final int MAX_TOKENS = 800; // Reduced for faster responses
     
     private final WebClient webClient;
     private final String modelName;
     private final ObjectMapper objectMapper;
-    private static final Duration TIMEOUT_DURATION = Duration.ofSeconds(180);
+    private static final Duration TIMEOUT_DURATION = Duration.ofSeconds(120); // Increased timeout
 
-    @Autowired
-    public AIService(WebClient.Builder webClientBuilder, 
+    public AIService(@org.springframework.beans.factory.annotation.Qualifier("ollamaWebClient") WebClient ollamaWebClient, 
                     @Value("${spring.ai.ollama.model}") String modelName,
                     ObjectMapper objectMapper) {
         this.modelName = modelName;
         this.objectMapper = objectMapper;
-        this.webClient = webClientBuilder
-                .baseUrl("http://localhost:11434")
-                .build();
+        this.webClient = ollamaWebClient;
     }
 
     @PostConstruct
     public void init() {
         log.info("AIService initialized with model: {}", modelName);
+        warmupOllama();
+    }
+    
+    private void warmupOllama() {
+        try {
+            log.info("Testing Ollama connection...");
+            Map<String, Object> testRequest = new HashMap<>();
+            testRequest.put("model", modelName);
+            testRequest.put("stream", false);
+            testRequest.put("messages", List.of(Map.of("role", "user", "content", "Hello")));
+            testRequest.put("options", Map.of("num_predict", 10));
+
+            String response = webClient.post()
+                    .uri(OLLAMA_API_URL)
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .bodyValue(testRequest)
+                    .retrieve()
+                    .bodyToMono(String.class)
+                    .timeout(Duration.ofSeconds(30))
+                    .block();
+                    
+            if (response != null && !response.isEmpty()) {
+                log.info("Ollama connection successful");
+            } else {
+                log.warn("Ollama connection test returned empty response");
+            }
+        } catch (Exception e) {
+            log.error("Ollama connection test failed: {}. AI analysis may not work properly.", e.getMessage());
+        }
     }
 
     public CompletableFuture<AnalysisResponse> generateComprehensiveAnalysis(
@@ -76,14 +99,21 @@ public class AIService {
                 Map<String, String> analysis = new HashMap<>();
                 String contextData = buildAnalysisContext(crypto, chartDataPoints, days);
                 
-                // Generate different types of analysis
-                analysis.put("general", generateAnalysis("general", contextData).block());
-                analysis.put("technical", generateAnalysis("technical", contextData).block());
-                analysis.put("fundamental", generateAnalysis("fundamental", contextData).block());
-                analysis.put("news", generateAnalysis("news", contextData).block());
-                analysis.put("sentiment", generateAnalysis("sentiment", contextData).block());
-                analysis.put("risk", generateAnalysis("risk", contextData).block());
-                analysis.put("prediction", generateAnalysis("prediction", contextData).block());
+                // Generate different types of analysis SEQUENTIALLY to avoid overwhelming Ollama
+                log.info("Starting sequential analysis generation for {}", crypto.getSymbol());
+                
+                analysis.put("general", generateAnalysisWithFallback("general", contextData));
+                analysis.put("technical", generateAnalysisWithFallback("technical", contextData));
+                analysis.put("fundamental", generateAnalysisWithFallback("fundamental", contextData));
+                analysis.put("risk", generateAnalysisWithFallback("risk", contextData));
+                
+                // Only generate additional analysis if the first few succeed
+                if (analysis.values().stream().noneMatch(v -> v.contains("could not be generated"))) {
+                    analysis.put("sentiment", generateAnalysisWithFallback("sentiment", contextData));
+                    analysis.put("prediction", generateAnalysisWithFallback("prediction", contextData));
+                }
+                
+                log.info("Completed analysis generation for {}", crypto.getSymbol());
                 
                 return AnalysisResponse.builder()
                     .analysis(analysis)
@@ -95,6 +125,27 @@ public class AIService {
                 throw new RuntimeException("Failed to generate analysis", e);
             }
         });
+    }
+    
+    public String generateAnalysisWithFallback(String type, String contextData) {
+        try {
+            return generateAnalysis(type, contextData).block();
+        } catch (Exception e) {
+            log.warn("Failed to generate {} analysis: {}", type, e.getMessage());
+            return getDefaultAnalysis(type);
+        }
+    }
+    
+    private String getDefaultAnalysis(String type) {
+        return switch (type) {
+            case "general" -> "🔴 CURRENT MARKET ANALYSIS UNAVAILABLE: Real-time general market analysis could not be generated due to AI service limitations. The current market data is available above, but AI-powered insights are temporarily unavailable. Please try again in a few moments.";
+            case "technical" -> "📊 TECHNICAL ANALYSIS UNAVAILABLE: Current technical analysis could not be generated due to AI service limitations. You can still review the current price levels and recent data provided above. Please try again for AI-powered technical insights.";
+            case "fundamental" -> "🏛️ FUNDAMENTAL ANALYSIS UNAVAILABLE: Current fundamental analysis could not be generated due to AI service limitations. The basic market metrics are shown above, but detailed fundamental insights are temporarily unavailable.";
+            case "sentiment" -> "💭 SENTIMENT ANALYSIS UNAVAILABLE: Current market sentiment analysis could not be generated due to AI service limitations. You can review the current price movements and volume data above for basic sentiment indicators.";
+            case "risk" -> "⚠️ RISK ASSESSMENT UNAVAILABLE: Current risk analysis could not be generated due to AI service limitations. Please review the volatility metrics above and try again for detailed risk assessment.";
+            case "prediction" -> "🔮 PRICE PREDICTIONS UNAVAILABLE: Current price predictions could not be generated due to AI service limitations. The current market data is available above for manual analysis. Please try again for AI-powered predictions.";
+            default -> "❌ ANALYSIS UNAVAILABLE: Current market analysis could not be generated due to AI service limitations. Please try again in a few moments.";
+        };
     }
 
     private void validateInputs(Cryptocurrency crypto, List<ChartDataPoint> chartDataPoints, int days) {
@@ -190,39 +241,43 @@ public class AIService {
     }
 
     private String buildGeneralPrompt(String contextData) {
-        return "Provide a comprehensive general market analysis (at least 3 paragraphs) for the following cryptocurrency data. " +
-               "Focus on overall market trends, position in the market, and key highlights. " +
+        return "🔴 LIVE CRYPTO ANALYSIS REQUEST - Provide a comprehensive real-time market analysis (minimum 3 paragraphs) for the following current cryptocurrency data. " +
+               "Focus on TODAY'S market trends, current position in the market, and recent highlights. " +
                "Structure your response with clear sections and ensure it's complete. " +
-               "If any data is missing, acknowledge it and provide analysis based on available information.\n\n" +
+               "Reference the actual current data provided and mention specific current price levels and recent changes. " +
+               "If any real-time data is missing, acknowledge it but provide the most current analysis possible based on available information.\n\n" +
                contextData +
-               "\n\nIMPORTANT: Your response must be complete and well-structured. " +
-               "Do not end mid-sentence or thought. Ensure all sections are properly closed.";
+               "\n\n⚠️ CRITICAL: Your analysis must reflect the CURRENT market state as of the timestamp provided. " +
+               "Use present tense when discussing the data. Do not make it sound historical unless specifically noting past trends. " +
+               "Include specific current price points and recent percentage changes in your analysis.";
     }
 
     private String buildTechnicalPrompt(String contextData) {
-        return "Perform a detailed technical analysis (at least 3 paragraphs) including:\n" +
-               "1. Price patterns and trends\n" +
-               "2. Key support/resistance levels\n" +
-               "3. Moving averages and indicators\n" +
-               "4. Volume analysis\n" +
-               "5. Trading signals and potential entry/exit points\n\n" +
-               "For: " + contextData + "\n\n" +
-               "IMPORTANT: Provide concrete price levels and specific technical observations. " +
-               "If any data is missing, state what's missing but still provide the most complete analysis possible. " +
-               "Ensure your response is complete and well-structured.";
+        return "📊 REAL-TIME TECHNICAL ANALYSIS - Perform a detailed current technical analysis (minimum 3 paragraphs) including:\n" +
+               "1. Current price action and immediate trends\n" +
+               "2. Present support/resistance levels based on recent data\n" +
+               "3. Current moving averages and technical indicators\n" +
+               "4. Recent volume analysis and market activity\n" +
+               "5. Immediate trading signals and potential entry/exit points\n\n" +
+               "📈 CURRENT MARKET DATA:\n" + contextData + "\n\n" +
+               "🎯 REQUIREMENTS: Reference specific CURRENT price levels and recent movements. " +
+               "Use the actual data provided to identify present market conditions. " +
+               "If certain technical data is missing, focus on available current information. " +
+               "Ensure your analysis reflects the live market state as of the timestamp provided.";
     }
 
     private String buildFundamentalPrompt(String contextData) {
-        return "Provide a thorough fundamental analysis (at least 3 paragraphs) covering:\n" +
-               "1. Market cap analysis and position\n" +
-               "2. Tokenomics and supply metrics\n" +
-               "3. Adoption and network activity\n" +
-               "4. Team and development activity\n" +
-               "5. Competitive landscape\n\n" +
-               "For: " + contextData + "\n\n" +
-               "IMPORTANT: Include specific metrics and comparisons where possible. " +
-               "Acknowledge any missing data but still provide the most complete analysis possible. " +
-               "Ensure your response is comprehensive and well-structured.";
+        return "🏛️ CURRENT FUNDAMENTAL ANALYSIS - Provide a thorough fundamental analysis based on current market data (minimum 3 paragraphs) covering:\n" +
+               "1. Current market cap position and ranking\n" +
+               "2. Present tokenomics and supply metrics\n" +
+               "3. Current adoption trends and network activity\n" +
+               "4. Recent development activity and updates\n" +
+               "5. Present competitive landscape position\n\n" +
+               "📊 LIVE MARKET FUNDAMENTALS:\n" + contextData + "\n\n" +
+               "🎯 FUNDAMENTAL FOCUS: Analyze the fundamentals based on CURRENT market data provided. " +
+               "Reference the actual current market cap, ranking, and supply metrics. " +
+               "Consider the present market position and recent changes in fundamental metrics. " +
+               "If specific fundamental data isn't available, focus on the current market metrics provided and acknowledge limitations.";
     }
 
     private String buildNewsPrompt(String contextData) {
@@ -238,40 +293,43 @@ public class AIService {
     }
 
     private String buildSentimentPrompt(String contextData) {
-        return "Evaluate the current market sentiment and investor behavior (at least 3 paragraphs). Analyze:\n" +
-               "1. Price action and volume trends\n" +
-               "2. Social media and community sentiment\n" +
-               "3. On-chain metrics (if available)\n" +
-               "4. Market psychology and positioning\n\n" +
-               "For: " + contextData + "\n\n" +
-               "IMPORTANT: Provide specific observations about market sentiment. " +
-               "If certain data points are missing, focus on the available information. " +
-               "Ensure your response is complete and well-structured.";
+        return "💭 LIVE SENTIMENT ANALYSIS - Evaluate the current market sentiment and investor behavior based on real-time data (minimum 3 paragraphs). Analyze:\n" +
+               "1. Current price action and recent volume trends\n" +
+               "2. Present market psychology indicators\n" +
+               "3. Recent trading patterns and market activity\n" +
+               "4. Current market positioning based on available data\n\n" +
+               "📊 CURRENT MARKET CONDITIONS:\n" + contextData + "\n\n" +
+               "🎯 SENTIMENT FOCUS: Base your sentiment analysis on the CURRENT market data and recent price movements provided. " +
+               "Reference specific current trading volumes and price changes to gauge market sentiment. " +
+               "Consider the data freshness and current market status when evaluating investor behavior. " +
+               "If certain sentiment indicators aren't available, focus on the current price and volume data provided.";
     }
 
     private String buildRiskPrompt(String contextData) {
-        return "Provide a comprehensive risk assessment (at least 3 paragraphs) covering:\n" +
-               "1. Volatility and price risks\n" +
-               "2. Market and liquidity risks\n" +
-               "3. Regulatory and compliance risks\n" +
-               "4. Protocol and smart contract risks\n" +
-               "5. Competitive risks\n\n" +
-               "For: " + contextData + "\n\n" +
-               "IMPORTANT: Be specific about potential risk factors and their likelihood/impact. " +
-               "Acknowledge any data limitations but still provide a complete analysis. " +
-               "Ensure your response is thorough and well-structured.";
+        return "⚠️ CURRENT RISK ASSESSMENT - Provide a comprehensive risk assessment based on current market conditions (minimum 3 paragraphs) covering:\n" +
+               "1. Current volatility and immediate price risks\n" +
+               "2. Present market and liquidity conditions\n" +
+               "3. Current regulatory environment and compliance risks\n" +
+               "4. Recent protocol and smart contract developments\n" +
+               "5. Immediate competitive landscape risks\n\n" +
+               "📊 LIVE MARKET DATA:\n" + contextData + "\n\n" +
+               "🎯 ANALYSIS FOCUS: Assess risks based on the CURRENT market conditions and data provided. " +
+               "Reference actual current volatility levels and recent price movements. " +
+               "Consider the present market status and data freshness when evaluating risks. " +
+               "Acknowledge any data limitations but provide the most current risk assessment possible.";
     }
 
     private String buildPredictionPrompt(String contextData) {
-        return "Generate informed price predictions and scenarios (at least 3 paragraphs). Include:\n" +
-               "1. Short-term outlook (1-2 weeks)\n" +
-               "2. Medium-term outlook (1-6 months)\n" +
-               "3. Key price levels to watch\n" +
-               "4. Potential upside and downside scenarios\n\n" +
-               "For: " + contextData + "\n\n" +
-               "IMPORTANT: Provide specific price targets and confidence levels. " +
-               "Acknowledge the limitations of predictions but still offer concrete analysis. " +
-               "Ensure your response is complete and well-structured.";
+        return "🔮 LIVE MARKET PREDICTIONS - Generate informed price predictions and scenarios based on current market data (minimum 3 paragraphs). Include:\n" +
+               "1. Short-term outlook (next 1-2 weeks) based on current trends\n" +
+               "2. Medium-term outlook (1-6 months) considering present market conditions\n" +
+               "3. Key current price levels to watch immediately\n" +
+               "4. Potential upside and downside scenarios from current levels\n\n" +
+               "📊 CURRENT MARKET CONDITIONS:\n" + contextData + "\n\n" +
+               "⚡ REQUIREMENTS: Base predictions on the CURRENT price and market data provided. " +
+               "Reference the actual current price levels and recent percentage changes. " +
+               "Acknowledge that these are projections based on present market conditions and data freshness. " +
+               "Use the specific current price as the baseline for all predictions and scenarios.";
     }
 
     public String buildAnalysisContext(
@@ -403,17 +461,49 @@ public class AIService {
 
     private String formatPriceHistory(List<ChartDataPoint> priceData) {
         if (priceData == null || priceData.isEmpty()) {
-            return "No price history available";
+            return "⚠️ No recent price history available - Analysis based on current snapshot only";
         }
         
-        return priceData.stream()
+        // Sort by timestamp to get most recent data first
+        List<ChartDataPoint> sortedData = priceData.stream()
+                .sorted((a, b) -> Long.compare(b.getTimestamp(), a.getTimestamp()))
                 .limit(MAX_PRICE_HISTORY_ITEMS)
-                .map(point -> String.format("%s: $%.2f",
-                        Instant.ofEpochMilli(point.getTimestamp())
-                                .atZone(ZoneId.systemDefault())
-                                .format(DateTimeFormatter.ofPattern("yyyy-MM-dd")),
-                        point.getPrice()))
-                .collect(Collectors.joining("\n"));
+                .collect(Collectors.toList());
+        
+        StringBuilder history = new StringBuilder("📈 RECENT PRICE MOVEMENTS:\n");
+        
+        for (int i = 0; i < sortedData.size(); i++) {
+            ChartDataPoint point = sortedData.get(i);
+            LocalDateTime dateTime = Instant.ofEpochMilli(point.getTimestamp())
+                    .atZone(ZoneId.systemDefault())
+                    .toLocalDateTime();
+            
+            String timeAgo = getTimeAgo(point.getTimestamp());
+            String indicator = i == 0 ? "🔴 LATEST" : (i < 3 ? "🟡 RECENT" : "🟢 EARLIER");
+            
+            history.append(String.format("%s: %s - $%.4f (%s)\n", 
+                    indicator,
+                    dateTime.format(DateTimeFormatter.ofPattern("MMM dd, HH:mm")), 
+                    point.getPrice(),
+                    timeAgo));
+        }
+        
+        return history.toString();
+    }
+    
+    private String getTimeAgo(long timestamp) {
+        long now = System.currentTimeMillis();
+        long diff = now - timestamp;
+        
+        if (diff < 60 * 1000) {
+            return "Just now";
+        } else if (diff < 60 * 60 * 1000) {
+            return (diff / (60 * 1000)) + " min ago";
+        } else if (diff < 24 * 60 * 60 * 1000) {
+            return (diff / (60 * 60 * 1000)) + " hrs ago";
+        } else {
+            return (diff / (24 * 60 * 60 * 1000)) + " days ago";
+        }
     }
 
     private String formatContextData(
@@ -424,6 +514,10 @@ public class AIService {
         
         DateTimeFormatter formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
         String currentDate = LocalDateTime.now().format(formatter);
+        
+        // Determine data freshness
+        String dataFreshness = getDataFreshness(priceData);
+        String marketStatus = getCurrentMarketStatus();
 
         // Safe access to crypto fields
         String name = safeString(crypto.getName());
@@ -436,31 +530,41 @@ public class AIService {
         BigDecimal circulatingSupply = safeBigDecimal(crypto.getCirculatingSupply());
 
         return String.format("""
-                ANALYSIS CONTEXT for %s (%s) - %s
-
-                CURRENT MARKET DATA:
+                ⏰ LIVE CRYPTO ANALYSIS CONTEXT for %s (%s) - %s
+                
+                🔴 REAL-TIME MARKET STATUS: %s
+                📊 DATA FRESHNESS: %s
+                
+                💰 CURRENT MARKET DATA (Live):
                 - Current Price: $%.2f
                 - Market Cap: $%.2f
-                - Rank: %s
-                - 24h Volume: $%.2f
-                - 24h Change: %.2f%%
-                - 7d Average Price: $%.2f
-                - 30d Average Price: $%.2f
-                - Volatility (%d days): %.2f%%
+                - Market Rank: #%s
+                - 24h Trading Volume: $%.2f
+                - 24h Price Change: %.2f%%
+                - 7-Day Average: $%.2f
+                - 30-Day Average: $%.2f
+                - Volatility Index: %.2f%%
                 - Circulating Supply: %s
-                - Price Change (Period): %.2f%%
+                - Period Price Change: %.2f%%
                 - High/Low Ratio: %.2f
 
-                PRICE HISTORY (%d data points over %d days):
+                📈 PRICE HISTORY ANALYSIS (%d data points over %d days):
                 %s
 
-                ADDITIONAL METRICS:
+                🎯 ANALYSIS PARAMETERS:
                 - Data Quality: %s
-                - Analysis Timestamp: %s
+                - Analysis Generated: %s
+                - Market Context: %s Trading Day
+                - Timezone: %s
+                
+                ⚠️ IMPORTANT: This analysis is based on the most recent available data as of %s. 
+                Market conditions change rapidly in cryptocurrency markets.
                 """,
                 name,
                 symbol,
                 currentDate,
+                marketStatus,
+                dataFreshness,
                 price.doubleValue(),
                 marketCap.doubleValue(),
                 rank,
@@ -468,7 +572,6 @@ public class AIService {
                 percentChange24h.doubleValue(),
                 metrics.getOrDefault("sevenDayAvg", 0.0),
                 metrics.getOrDefault("thirtyDayAvg", 0.0),
-                days,
                 metrics.getOrDefault("volatility", 0.0),
                 formatSupply(circulatingSupply),
                 metrics.getOrDefault("priceChange", 0.0),
@@ -476,9 +579,51 @@ public class AIService {
                 priceData != null ? priceData.size() : 0,
                 days,
                 formatPriceHistory(priceData),
-                priceData != null && !priceData.isEmpty() ? "Good" : "Limited",
+                priceData != null && !priceData.isEmpty() ? "Real-time" : "Limited/Historical",
+                currentDate,
+                getDayOfWeek(),
+                ZoneId.systemDefault().toString(),
                 currentDate
         );
+    }
+    
+    private String getDataFreshness(List<ChartDataPoint> priceData) {
+        if (priceData == null || priceData.isEmpty()) {
+            return "⚠️ Limited - No recent price data available";
+        }
+        
+        // Check if we have recent data (within last 24 hours)
+        long currentTime = System.currentTimeMillis();
+        long oneDayAgo = currentTime - (24 * 60 * 60 * 1000);
+        
+        boolean hasRecentData = priceData.stream()
+                .anyMatch(point -> point.getTimestamp() > oneDayAgo);
+                
+        if (hasRecentData) {
+            return "🟢 FRESH - Data updated within 24 hours";
+        } else {
+            return "🟡 HISTORICAL - Data may be older than 24 hours";
+        }
+    }
+    
+    private String getCurrentMarketStatus() {
+        LocalDateTime now = LocalDateTime.now();
+        int hour = now.getHour();
+        
+        // Crypto markets are 24/7, but we can indicate peak trading hours
+        if (hour >= 8 && hour <= 17) {
+            return "🌅 PEAK TRADING HOURS (Business Hours)";
+        } else if (hour >= 18 && hour <= 23) {
+            return "🌃 EVENING TRADING (High Activity)";
+        } else {
+            return "🌙 OVERNIGHT TRADING (Lower Volume)";
+        }
+    }
+    
+    private String getDayOfWeek() {
+        LocalDateTime now = LocalDateTime.now();
+        String dayOfWeek = now.getDayOfWeek().toString();
+        return dayOfWeek.charAt(0) + dayOfWeek.substring(1).toLowerCase();
     }
 
     private String formatSupply(BigDecimal supply) {

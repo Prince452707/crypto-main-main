@@ -147,4 +147,33 @@ public class CryptoApiController {
                 });
     }
 
+    @GetMapping("/crypto/news")
+    public Mono<ResponseEntity<ApiResponse<List<CryptoNews>>>> getCryptoNews(
+            @RequestParam(defaultValue = "50") int limit,
+            @RequestParam(defaultValue = "EN") String lang) {
+        return apiService.getCryptoNews(limit, lang)
+                .collectList()
+                .map(news -> ResponseEntity.ok(ApiResponse.success(news, "Crypto news fetched successfully")))
+                .onErrorResume(e -> {
+                    log.error("Error fetching crypto news: {}", e.getMessage(), e);
+                    return Mono.just(ResponseEntity.badRequest()
+                            .body(ApiResponse.error("Error fetching crypto news: " + e.getMessage())));
+                });
+    }
+
+    @GetMapping("/crypto/{symbol}/news")
+    public Mono<ResponseEntity<ApiResponse<List<CryptoNews>>>> getCryptoNewsBySymbol(
+            @PathVariable String symbol,
+            @RequestParam(defaultValue = "20") int limit,
+            @RequestParam(defaultValue = "EN") String lang) {
+        return apiService.getCryptoNewsBySymbol(symbol, limit, lang)
+                .collectList()
+                .map(news -> ResponseEntity.ok(ApiResponse.success(news, "Crypto news for " + symbol + " fetched successfully")))
+                .onErrorResume(e -> {
+                    log.error("Error fetching crypto news for {}: {}", symbol, e.getMessage(), e);
+                    return Mono.just(ResponseEntity.badRequest()
+                            .body(ApiResponse.error("Error fetching crypto news for " + symbol + ": " + e.getMessage())));
+                });
+    }
+
 }

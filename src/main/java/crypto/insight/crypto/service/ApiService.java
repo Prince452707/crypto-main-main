@@ -61,6 +61,23 @@ public class ApiService {
                 .flatMap(this::fetchAllDataFromProviders);
     }
 
+    /**
+     * Gets aggregated crypto data with option to force refresh (bypass cache)
+     */
+    public Mono<CryptoData> getAggregatedCryptoData(String query, boolean forceRefresh) {
+        String normalizedQuery = query.trim().toLowerCase();
+
+        if (forceRefresh) {
+            log.info("Force refresh requested for '{}' - bypassing cache", normalizedQuery);
+            // Clear cache for this query
+            identityCache.evict(normalizedQuery);
+            return resolveAndCacheIdentity(normalizedQuery)
+                    .flatMap(this::fetchAllDataFromProviders);
+        } else {
+            return getAggregatedCryptoData(normalizedQuery);
+        }
+    }
+    
     private Mono<CryptoIdentity> resolveAndCacheIdentity(String query) {
         log.info("Cache miss for identity: '{}'. Resolving from providers.", query);
         return Flux.fromIterable(dataProviders)
@@ -92,7 +109,14 @@ public class ApiService {
         log.info("Fetching all data for resolved identity: {} ({})", identity.getSymbol(), identity.getName());
 
         return Flux.fromIterable(dataProviders)
-                .flatMap(provider -> provider.fetchData(identity))
+                .flatMap(provider -> 
+                    provider.fetchData(identity)
+                        .doOnError(error -> log.warn("Provider {} failed to fetch data for {}: {}", 
+                            provider.getProviderName(), identity.getSymbol(), error.getMessage()))
+                        .onErrorResume(error -> {
+                            log.debug("Skipping provider {} due to error: {}", provider.getProviderName(), error.getMessage());
+                            return Mono.empty(); // Skip this provider and continue with others
+                        }))
                 .reduce(new CryptoData(identity), (aggregatedData, newData) -> {
                     log.debug("Merging data from provider: {}", newData.getSource());
                     aggregatedData.mergeWith(newData);
@@ -106,6 +130,15 @@ public class ApiService {
     public Mono<Cryptocurrency> getCryptocurrencyData(String symbol, int days) {
         log.warn("Legacy getCryptocurrencyData called for {}. Delegating to new aggregation method. 'days' parameter is ignored.", symbol);
         return getAggregatedCryptoData(symbol)
+                .map(this::mapToLegacyCryptocurrency);
+    }
+
+    /**
+     * Legacy method for backward compatibility with refresh option
+     */
+    public Mono<Cryptocurrency> getCryptocurrencyData(String symbol, int days, boolean forceRefresh) {
+        log.warn("Legacy getCryptocurrencyData called for {} with refresh={}. Delegating to new aggregation method. 'days' parameter is ignored.", symbol, forceRefresh);
+        return getAggregatedCryptoData(symbol, forceRefresh)
                 .map(this::mapToLegacyCryptocurrency);
     }
 
@@ -137,11 +170,8 @@ public class ApiService {
     }
 
     /**
-     * Searches for cryptocurrencies based on a query string using CoinGecko.
-     * If the query is empty, returns a default list of popular cryptocurrencies.
-     */
-    /**
-     * Searches for cryptocurrencies by query or returns a default list of popular ones if query is empty.
+     * Searches for cryptocurrencies by query using all available providers, or returns popular ones if query is empty.
+     * This method now uses the multi-provider aggregation system for more comprehensive and current data.
      * 
      * @param query The search query (can be empty or null for popular cryptocurrencies)
      * @return A Flux of Cryptocurrency objects matching the search or popular cryptocurrencies
@@ -149,43 +179,44 @@ public class ApiService {
     public Flux<Cryptocurrency> searchCryptocurrencies(String query) {
         log.debug("Searching for cryptocurrencies with query: {}", query);
         
-        // If query is empty or null, return a default list of popular cryptocurrencies
+        // If query is empty or null, return a default list of popular cryptocurrencies from all providers
         if (query == null || query.trim().isEmpty()) {
-            log.info("Empty search query, returning default list of popular cryptocurrencies");
-            String defaultUrl = apiProperties.getCoinGeckoBaseUrl() + 
-                    "/coins/markets?vs_currency=usd&order=market_cap_desc&per_page=100&page=1&sparkline=false";
+            log.info("Empty search query, returning default list of popular cryptocurrencies from all providers");
             
-            return webClient.get()
-                    .uri(defaultUrl)
-                    .retrieve()
-                    .bodyToMono(new ParameterizedTypeReference<List<Map<String, Object>>>() {})
-                    .doOnNext(markets -> {
-                        if (markets == null || markets.isEmpty()) {
-                            log.warn("Received empty markets data from CoinGecko");
-                        } else {
-                            log.debug("Successfully fetched {} popular cryptocurrencies", markets.size());
+            // Get popular cryptos from multiple providers and merge them
+            String[] popularCryptos = {"BTC", "ETH", "BNB", "XRP", "ADA", "SOL", "DOT", "MATIC", "AVAX", "LINK", "UNI", "LTC", "ATOM", "FTM", "ALGO"};
+            
+            return Flux.fromArray(popularCryptos)
+                    .flatMap(symbol -> getAggregatedCryptoData(symbol)
+                            .map(this::mapToLegacyCryptocurrency)
+                            .onErrorResume(e -> {
+                                log.debug("Failed to fetch data for {}: {}", symbol, e.getMessage());
+                                return Mono.empty();
+                            }))
+                    .take(50) // Limit to 50 popular cryptos
+                    .sort((a, b) -> {
+                        // Sort by market cap rank if available
+                        if (a.getRank() != null && b.getRank() != null) {
+                            return Integer.compare(a.getRank(), b.getRank());
                         }
-                    })
-                    .flatMapMany(markets -> {
-                        if (markets == null || markets.isEmpty()) {
-                            return Flux.empty();
-                        }
-                        try {
-                            List<Cryptocurrency> cryptoList = mapFromCoinGeckoMarkets(markets);
-                            log.debug("Mapped {} market items to Cryptocurrency objects", cryptoList.size());
-                            return Flux.fromIterable(cryptoList);
-                        } catch (Exception e) {
-                            log.error("Error mapping market data to Cryptocurrency objects: {}", e.getMessage(), e);
-                            return Flux.error(e);
-                        }
-                    })
-                    .onErrorResume(e -> {
-                        log.error("Error fetching default cryptocurrencies: {}", e.getMessage(), e);
-                        return Flux.empty();
+                        return 0;
                     });
         }
         
-        // If there's a query, search for it
+        // If there's a query, use aggregated search
+        return getAggregatedCryptoData(query)
+                .map(this::mapToLegacyCryptocurrency)
+                .flux()
+                .onErrorResume(e -> {
+                    log.warn("Aggregated search failed for '{}', falling back to CoinGecko search: {}", query, e.getMessage());
+                    return fallbackCoinGeckoSearch(query);
+                });
+    }
+    
+    /**
+     * Fallback method using CoinGecko search when aggregated search fails
+     */
+    private Flux<Cryptocurrency> fallbackCoinGeckoSearch(String query) {
         String url = apiProperties.getCoinGeckoBaseUrl() + "/search?query=" + query;
 
         return webClient.get()
@@ -198,28 +229,40 @@ public class ApiService {
                         try {
                             @SuppressWarnings("unchecked")
                             List<Map<String, Object>> coins = (List<Map<String, Object>>) coinsObj;
-                            if (coins.isEmpty()) {
-                                log.info("No results found for query: {}", query);
-                                return Flux.empty();
-                            }
                             return Flux.fromIterable(mapFromCoinGeckoSearch(coins));
                         } catch (ClassCastException e) {
-                            log.warn("Unexpected coins format in response", e);
+                            log.error("Unexpected response format from CoinGecko search: {}", e.getMessage());
+                            return Flux.empty();
                         }
                     }
                     return Flux.empty();
                 })
                 .onErrorResume(e -> {
-                    log.error("Error searching for cryptocurrencies: {}", e.getMessage());
+                    log.error("Error in fallback CoinGecko search: {}", e.getMessage());
                     return Flux.empty();
                 });
     }
 
     /**
      * Fetches detailed information for a specific cryptocurrency by its CoinGecko ID.
+     * This method now uses aggregated data when possible.
      */
     public Mono<Cryptocurrency> getCryptocurrencyDetails(String id) {
         log.debug("Fetching details for coin ID: {}", id);
+        
+        // Try to get aggregated data first
+        return getAggregatedCryptoData(id)
+                .map(this::mapToLegacyCryptocurrency)
+                .onErrorResume(e -> {
+                    log.debug("Aggregated data failed for '{}', falling back to CoinGecko: {}", id, e.getMessage());
+                    return fallbackCoinGeckoDetails(id);
+                });
+    }
+    
+    /**
+     * Fallback method for getting details from CoinGecko only
+     */
+    private Mono<Cryptocurrency> fallbackCoinGeckoDetails(String id) {
         String url = apiProperties.getCoinGeckoBaseUrl() + "/coins/" + id;
 
         return webClient.get()
@@ -312,6 +355,18 @@ public class ApiService {
             "market_caps", ohlcData.getOrDefault("market_caps", List.of()),
             "total_volumes", ohlcData.getOrDefault("total_volumes", List.of())
         );
+    }
+
+    /**
+     * Fetches the market chart data with option to force refresh
+     */
+    public Mono<Map<String, Object>> getMarketChart(String id, int days, boolean forceRefresh) {
+        if (forceRefresh) {
+            log.info("Force refresh requested for market chart data: {} for {} days", id, days);
+            // For market chart, we don't have explicit caching but the providers might cache
+            // We'll just call the regular method as it should get fresh data from APIs
+        }
+        return getMarketChart(id, days);
     }
 
     // Helper methods for mapping CoinGecko API responses
@@ -479,5 +534,82 @@ public class ApiService {
                 .map(this::mapFromCoinGeckoDetails);
     }
 
+    /**
+     * Fetches general crypto news from CryptoCompare API.
+     * @param limit Number of news articles to fetch
+     * @param lang Language preference
+     * @return A Flux containing the crypto news
+     */
+    public Flux<crypto.insight.crypto.model.CryptoNews> getCryptoNews(int limit, String lang) {
+        log.debug("Fetching crypto news with limit: {} and language: {}", limit, lang);
+        String url = apiProperties.getCryptocompare().getCryptoCompareBaseUrl() + "/v2/news/?lang=" + lang;
+
+        return webClient.get()
+                .uri(url)
+                .retrieve()
+                .bodyToMono(new ParameterizedTypeReference<Map<String, Object>>() {})
+                .flatMapMany(response -> {
+                    @SuppressWarnings("unchecked")
+                    List<Map<String, Object>> newsData = (List<Map<String, Object>>) response.get("Data");
+                    if (newsData != null) {
+                        return Flux.fromIterable(newsData)
+                                .take(limit)
+                                .map(this::mapToCryptoNews);
+                    }
+                    return Flux.empty();
+                })
+                .doOnError(error -> log.error("Error fetching crypto news: {}", error.getMessage()));
+    }
+
+    /**
+     * Fetches crypto news for a specific symbol from CryptoCompare API.
+     * @param symbol The cryptocurrency symbol
+     * @param limit Number of news articles to fetch
+     * @param lang Language preference
+     * @return A Flux containing the crypto news for the symbol
+     */
+    public Flux<crypto.insight.crypto.model.CryptoNews> getCryptoNewsBySymbol(String symbol, int limit, String lang) {
+        log.debug("Fetching crypto news for symbol: {} with limit: {} and language: {}", symbol, limit, lang);
+        String url = apiProperties.getCryptocompare().getCryptoCompareBaseUrl() + "/v2/news/?categories=" + symbol.toUpperCase() + "&lang=" + lang;
+
+        return webClient.get()
+                .uri(url)
+                .retrieve()
+                .bodyToMono(new ParameterizedTypeReference<Map<String, Object>>() {})
+                .flatMapMany(response -> {
+                    @SuppressWarnings("unchecked")
+                    List<Map<String, Object>> newsData = (List<Map<String, Object>>) response.get("Data");
+                    if (newsData != null) {
+                        return Flux.fromIterable(newsData)
+                                .take(limit)
+                                .map(this::mapToCryptoNews);
+                    }
+                    return Flux.empty();
+                })
+                .doOnError(error -> log.error("Error fetching crypto news for {}: {}", symbol, error.getMessage()));
+    }
+
+    /**
+     * Maps CryptoCompare news data to CryptoNews model.
+     */
+    private crypto.insight.crypto.model.CryptoNews mapToCryptoNews(Map<String, Object> newsData) {
+        crypto.insight.crypto.model.CryptoNews news = new crypto.insight.crypto.model.CryptoNews();
+        news.setId((String) newsData.get("id"));
+        news.setTitle((String) newsData.get("title"));
+        news.setBody((String) newsData.get("body"));
+        news.setUrl((String) newsData.get("url"));
+        news.setSource((String) newsData.get("source"));
+        news.setImageUrl((String) newsData.get("imageurl"));
+        news.setTags((String) newsData.get("tags"));
+        news.setCategories((String) newsData.get("categories"));
+        news.setLang((String) newsData.get("lang"));
+        
+        Object publishedOn = newsData.get("published_on");
+        if (publishedOn instanceof Number) {
+            news.setPublishedOn(((Number) publishedOn).longValue());
+        }
+        
+        return news;
+    }
 
 }

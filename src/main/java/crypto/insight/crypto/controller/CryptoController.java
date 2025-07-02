@@ -1,10 +1,12 @@
 package crypto.insight.crypto.controller;
 
 import crypto.insight.crypto.model.AnalysisResponse;
+import crypto.insight.crypto.model.AnalysisType;
 import crypto.insight.crypto.model.ApiResponse;
 import crypto.insight.crypto.model.ChartDataPoint;
 import crypto.insight.crypto.service.ApiService;
 import crypto.insight.crypto.service.AIService;
+import crypto.insight.crypto.service.ParallelAIService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -19,13 +21,15 @@ import java.util.stream.Collectors;
 @RestController
 public class CryptoController {
     
-    public CryptoController(ApiService apiService, AIService aiService) {
-        this.apiService = apiService;
-        this.aiService = aiService;
-    }
-    
     private final ApiService apiService;
     private final AIService aiService;
+    private final ParallelAIService parallelAIService;
+    
+    public CryptoController(ApiService apiService, AIService aiService, ParallelAIService parallelAIService) {
+        this.apiService = apiService;
+        this.aiService = aiService;
+        this.parallelAIService = parallelAIService;
+    }
     
 
 
@@ -41,9 +45,18 @@ public class CryptoController {
     public Mono<ResponseEntity<ApiResponse<AnalysisResponse>>> getAnalysis(
             @PathVariable String symbol,
             @PathVariable(required = false) Integer days,
-            @RequestParam(required = false) Integer daysParam) {
+            @RequestParam(required = false) Integer daysParam,
+            @RequestParam(required = false) String types,
+            @RequestParam(required = false, defaultValue = "false") boolean refresh) {
         
-        log.info("Received analysis request for symbol: {}, days: {}, daysParam: {}", symbol, days, daysParam);
+        log.info("Received analysis request for symbol: {}, days: {}, daysParam: {}, types: {}, refresh: {}", 
+                symbol, days, daysParam, types, refresh);
+        
+        // Parse analysis types
+        List<AnalysisType> analysisTypes = AnalysisType.parseTypes(types);
+        log.info("Requested analysis types: {}", analysisTypes.stream()
+                .map(AnalysisType::getDisplayName)
+                .collect(Collectors.toList()));
         
         // Use the most specific parameter (path variable takes precedence over query param)
         int daysToUse = days != null ? days : (daysParam != null ? daysParam : 30);
@@ -53,10 +66,10 @@ public class CryptoController {
                     .body(ApiResponse.error("Days parameter must be between 1 and 365")));
         }
         
-        return apiService.getCryptocurrencyData(symbol, daysToUse)
+        return apiService.getCryptocurrencyData(symbol, daysToUse, refresh)
                 .flatMap(crypto -> {
                     // Get market chart data if available, but don't fail if it's not
-                    Mono<List<ChartDataPoint>> marketChartMono = apiService.getMarketChart(symbol, daysToUse)
+                    Mono<List<ChartDataPoint>> marketChartMono = apiService.getMarketChart(symbol, daysToUse, refresh)
                             .onErrorResume(e -> {
                                 log.warn("Market chart data not available for {}: {}", symbol, e.getMessage());
                                 return Mono.just(Collections.emptyMap());
@@ -84,18 +97,37 @@ public class CryptoController {
                             log.info("No market chart data available for {}, proceeding with basic analysis", symbol);
                         }
                         
-                        return Mono.fromFuture(aiService.generateComprehensiveAnalysis(
-                                crypto,
-                                chartData,
-                                daysToUse
-                        ));
+                        // Choose analysis method based on types requested
+                        if (analysisTypes.size() == 7) {
+                            // All types requested - use full parallel analysis
+                            return Mono.fromFuture(parallelAIService.generateParallelAnalysis(
+                                    crypto,
+                                    chartData,
+                                    daysToUse
+                            ));
+                        } else {
+                            // Specific types requested - use selective analysis
+                            return Mono.fromFuture(parallelAIService.generateParallelAnalysisByType(
+                                    crypto,
+                                    chartData,
+                                    daysToUse,
+                                    analysisTypes
+                            ));
+                        }
                     });
                 })
                 .<ResponseEntity<ApiResponse<AnalysisResponse>>>map(analysis -> {
                     AnalysisResponse response = (AnalysisResponse) analysis;
+                    
+                    // Create success message with info about analysis types
+                    String message = analysisTypes.size() == 7 
+                        ? "Complete analysis completed successfully" 
+                        : "Selected analysis completed successfully: " + 
+                          analysisTypes.stream().map(AnalysisType::getDisplayName).collect(Collectors.joining(", "));
+                    
                     return ResponseEntity.ok(ApiResponse.success(
                             response,
-                            "Analysis completed successfully" + 
+                            message + 
                                 (response.getChartData() == null || response.getChartData().isEmpty() ? " (no market chart data available)" : "")
                     ));
                 })
@@ -121,7 +153,7 @@ public class CryptoController {
      * @param symbol The cryptocurrency symbol (e.g., "BTC")
      * @return ResponseEntity containing the cryptocurrency details or an error message
      */
-    @GetMapping({"/api/v1/crypto/{symbol}", "/api/v3/crypto/{symbol}"})
+    @GetMapping({"/api/v1/crypto/info/{symbol}", "/api/v3/crypto/info/{symbol}"})
     public Mono<ResponseEntity<ApiResponse<Map<String, Object>>>> getCryptoDetailsBySymbol(
             @PathVariable String symbol) {
         final String requestId = UUID.randomUUID().toString();
@@ -173,5 +205,30 @@ public class CryptoController {
                             .status(HttpStatus.INTERNAL_SERVER_ERROR)
                             .body(ApiResponse.error("Failed to fetch cryptocurrency details")));
                 });
+    }
+
+    /**
+     * Get available analysis types
+     */
+    @GetMapping("/api/v1/crypto/analysis-types")
+    public ResponseEntity<ApiResponse<Map<String, Object>>> getAnalysisTypes() {
+        Map<String, Object> response = new HashMap<>();
+        
+        List<Map<String, String>> types = Arrays.stream(AnalysisType.values())
+                .map(type -> {
+                    Map<String, String> typeInfo = new HashMap<>();
+                    typeInfo.put("code", type.getCode());
+                    typeInfo.put("displayName", type.getDisplayName());
+                    return typeInfo;
+                })
+                .collect(Collectors.toList());
+        
+        response.put("availableTypes", types);
+        response.put("usage", "Add '?types=general,technical,sentiment' to specify analysis types");
+        response.put("example", "/api/v1/crypto/analysis/BTC?types=general,technical");
+        response.put("refresh", "Add '&refresh=true' to force fresh data from APIs (bypasses cache)");
+        response.put("exampleWithRefresh", "/api/v1/crypto/analysis/BTC?types=general,technical&refresh=true");
+        
+        return ResponseEntity.ok(ApiResponse.success(response, "Available analysis types"));
     }
 }
