@@ -7,21 +7,101 @@ spring:
   cache:
     type: caffeine
     caffeine:
-      spec: maximumSize=500,expireAfterWrite=2m
+      spec: maximumSize=2000,expireAfterWrite=15s,expireAfterAccess=2m,recordStats,refreshAfterWrite=10s
+  # HTTP client optimizations - EXTREME SETTINGS
+  webclient:
+    connect-timeout: 2000  # Reduced for faster connections
+    read-timeout: 8000     # Reduced timeout
+    connection-pool:
+      max-connections: 500    # Increased connections
+      max-connections-per-route: 100  # More per route
+      connection-idle-timeout: 30000
+      connection-max-lifetime: 300000
+  # Thread pool optimizations
+  task:
+    execution:
+      pool:
+        core-size: 20
+        max-size: 100
+        queue-capacity: 1000
+        keep-alive: 60s
+        thread-name-prefix: crypto-exec-
+    scheduling:
+      pool:
+        size: 10
+        thread-name-prefix: crypto-sched-
+  # JPA optimizations
+  jpa:
+    show-sql: false
+    open-in-view: false  # Disable for performance
+    properties:
+      hibernate:
+        jdbc:
+          batch_size: 100  # Increased for better batching
+          fetch_size: 200  # Increased fetch size
+          time_zone: UTC
+        connection:
+          provider_disables_autocommit: true
+        cache:
+          use_second_level_cache: true
+          use_query_cache: true
+          region:
+            factory_class: org.hibernate.cache.caffeine.CaffeineCacheRegionFactory
+        order_inserts: true
+        order_updates: true
+        batch_versioned_data: true
+        format_sql: false
+        generate_statistics: false
+  # Database connection pool optimizations
+  datasource:
+    hikari:
+      maximum-pool-size: 50
+      minimum-idle: 10
+      connection-timeout: 5000
+      idle-timeout: 300000
+      max-lifetime: 600000
+      auto-commit: false
+      connection-test-query: SELECT 1
+      pool-name: CryptoHikariPool
+      leak-detection-threshold: 10000
   ai:
     ollama:
       base-url: http://localhost:11434
       model: tinyllama:1.1b
       chat:
         options:
-          temperature: 0.7
-          top-p: 0.9
-          top-k: 40
-          num-predict: 800
-          stop: ["</s>", "Human:", "Assistant:"]
+          temperature: 0.3  # Reduced for faster, more consistent responses
+          top-p: 0.7        # Reduced for speed
+          top-k: 20         # Reduced for speed
+          num-predict: 200  # Further reduced for ultra-fast responses
+          num-ctx: 1024     # Reduced context window
+          repeat_penalty: 1.0
+          stop: ["</s>", "Human:", "Assistant:", "\n\n"]
 
 server:
   port: 8081
+  # EXTREME Performance optimizations
+  tomcat:
+    threads:
+      max: 500        # Increased thread pool
+      min-spare: 50   # More spare threads
+    connection-timeout: 10000  # Reduced timeout
+    max-connections: 16384     # Doubled connections
+    accept-count: 500          # Increased accept queue
+    max-http-form-post-size: 2MB
+    max-swallow-size: 2MB
+    processor-cache: 500
+    keep-alive-timeout: 5000
+    max-keep-alive-requests: 1000
+  # Enhanced compression
+  compression:
+    enabled: true
+    mime-types: application/json,text/css,text/html,text/xml,text/plain,application/javascript,text/css,image/svg+xml
+    min-response-size: 512  # Reduced threshold
+  # Connection optimizations
+  http2:
+    enabled: true
+  forward-headers-strategy: native
   ssl:
     enabled: false
     # key-store: classpath:keystore.p12
@@ -33,10 +113,15 @@ logging:
   file:
     name: application.log
   level:
-    root: INFO
-    crypto.insight.crypto: DEBUG
-    org.springframework.web: DEBUG
-    org.springframework.web.reactive: DEBUG
+    root: WARN  # Reduced logging for performance
+    crypto.insight.crypto: INFO  # Reduced from DEBUG
+    org.springframework.web: WARN  # Reduced from DEBUG
+    org.springframework.web.reactive: WARN  # Reduced from DEBUG
+    org.hibernate.SQL: WARN
+    org.hibernate.type: WARN
+  pattern:
+    console: "%d{HH:mm:ss.SSS} [%thread] %-5level %logger{36} - %msg%n"
+    file: "%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level %logger{36} - %msg%n"
 
 # This section is what your AIService is actually reading from
 #ai:
@@ -64,8 +149,34 @@ management:
   endpoints:
     web:
       exposure:
-        include: "*"
+        include: "health,info,metrics,caches"  # Limited endpoints for performance
+  endpoint:
+    health:
+      cache:
+        time-to-live: 10s
+  metrics:
+    enabled: true
+  health:
+    cache:
+      enabled: true
+
+# EXTREME Performance configuration
+performance:
+  cache:
+    preload-on-startup: true
+    aggressive-refresh: true
+    memory-limit-mb: 512
+  connection:
+    pool-size: 500
+    timeout-ms: 2000
+  async:
+    core-pool-size: 20
+    max-pool-size: 100
+    queue-capacity: 2000
 
 # Security configuration
 security:
-  # Add security configurations here
+  # Minimal security for maximum performance
+  basic:
+    enabled: false
+  sessions: stateless

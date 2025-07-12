@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>API Test</title>
+</head>
+<body>
+    <h1>API Connection Test</h1>
+    <button onclick="testApi()">Test API Connection</button>
+    <button onclick="testWebSocket()">Test WebSocket Connection</button>
+    <div id="result"></div>
+
+    <script>
+        async function testApi() {
+            const result = document.getElementById('result');
+            result.innerHTML = 'Testing API...';
+            
+            try {
+                const response = await fetch('http://localhost:8081/api/v1/crypto/analysis/pol?days=7');
+                const data = await response.json();
+                result.innerHTML = `<h3>API Test Success!</h3><pre>${JSON.stringify(data, null, 2)}</pre>`;
+            } catch (error) {
+                result.innerHTML = `<h3>API Test Failed:</h3><p>${error.message}</p>`;
+            }
+        }
+
+        function testWebSocket() {
+            const result = document.getElementById('result');
+            result.innerHTML = 'Testing WebSocket...';
+            
+            try {
+                const ws = new WebSocket('ws://localhost:8081/ws/crypto');
+                
+                ws.onopen = function() {
+                    result.innerHTML = '<h3>WebSocket Connected!</h3>';
+                    ws.send(JSON.stringify({action: 'subscribe', symbol: 'pol'}));
+                };
+                
+                ws.onmessage = function(event) {
+                    const data = JSON.parse(event.data);
+                    result.innerHTML += `<p>Received: ${JSON.stringify(data, null, 2)}</p>`;
+                };
+                
+                ws.onerror = function(error) {
+                    result.innerHTML = `<h3>WebSocket Error:</h3><p>${error}</p>`;
+                };
+                
+                ws.onclose = function() {
+                    result.innerHTML += '<p>WebSocket connection closed</p>';
+                };
+            } catch (error) {
+                result.innerHTML = `<h3>WebSocket Test Failed:</h3><p>${error.message}</p>`;
+            }
+        }
+    </script>
+</body>
+</html>

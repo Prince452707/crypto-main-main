@@ -14,10 +14,10 @@ public class CorsGlobalConfiguration implements WebFluxConfigurer {
                 .allowedOrigins(
                     "http://localhost:8088",     // Original configuration
                     "http://localhost:3000",     // React development server
-                    "http://localhost:8080",     // Alternative Flutter web port
+                    "http://localhost:8081",     // Main API port
                     "http://localhost:5000",     // Flutter web debug port
                     "http://127.0.0.1:3000",     // Alternative localhost format
-                    "http://127.0.0.1:8080",     // Alternative localhost format
+                    "http://127.0.0.1:8081",   // Main API port (localhost variant)
                     "http://127.0.0.1:5000"      // Alternative localhost format
                 )
                 .allowedMethods("GET", "POST", "PUT", "DELETE", "OPTIONS")

@@ -6,9 +6,13 @@ import '../../features/markets/screens/markets_screen.dart';
 import '../../features/analysis/screens/analysis_screen.dart';
 import '../../features/portfolio/screens/portfolio_screen.dart';
 import '../../features/news/screens/news_screen.dart';
-import '../../features/crypto_detail/screens/crypto_detail_screen.dart';
+import '../../features/crypto_detail/screens/unified_crypto_detail_screen.dart';
+import '../../features/bookmarks/screens/bookmarks_screen.dart';
+import '../../features/similar_cryptos/screens/similar_cryptos_screen.dart';
 import '../../features/settings/screens/settings_screen.dart';
 import '../../shared/widgets/main_layout.dart';
+import '../../shared/widgets/professional_trading_dashboard.dart';
+import '../../shared/widgets/crypto_market_screener.dart';
 
 class AppRouter {
   static final GoRouter router = GoRouter(
@@ -49,13 +53,36 @@ class AppRouter {
             name: 'crypto-detail',
             builder: (context, state) {
               final symbol = state.pathParameters['symbol']!;
-              return CryptoDetailScreen(symbol: symbol);
+              return UnifiedCryptoDetailScreen(symbol: symbol);
+            },
+          ),
+          GoRoute(
+            path: '/bookmarks',
+            name: 'bookmarks',
+            builder: (context, state) => const BookmarksScreen(),
+          ),
+          GoRoute(
+            path: '/similar/:symbol',
+            name: 'similar-cryptos',
+            builder: (context, state) {
+              final symbol = state.pathParameters['symbol']!;
+              return SimilarCryptosScreen(symbol: symbol);
             },
           ),
           GoRoute(
             path: '/settings',
             name: 'settings',
             builder: (context, state) => const SettingsScreen(),
+          ),
+          GoRoute(
+            path: '/pro-trading',
+            name: 'pro-trading',
+            builder: (context, state) => const ProfessionalTradingDashboard(),
+          ),
+          GoRoute(
+            path: '/screener',
+            name: 'screener',
+            builder: (context, state) => const CryptoMarketScreener(),
           ),
         ],
       ),

@@ -177,98 +177,117 @@ class AppTheme {
   }
 
   static TextTheme _buildTextTheme(Color textColor) {
+    // Use Inter font with fallbacks for better reliability
+    TextStyle baseStyle = TextStyle(
+      fontFamily: 'Inter',
+      color: textColor,
+      fontFamilyFallback: const ['Segoe UI', 'Roboto', 'Arial', 'sans-serif'],
+    );
+
     return TextTheme(
-      displayLarge: GoogleFonts.inter(
+      displayLarge: baseStyle.copyWith(
         fontSize: 32,
         fontWeight: FontWeight.w700,
-        color: textColor,
         height: 1.2,
       ),
-      displayMedium: GoogleFonts.inter(
+      displayMedium: baseStyle.copyWith(
         fontSize: 28,
         fontWeight: FontWeight.w600,
-        color: textColor,
         height: 1.2,
       ),
-      displaySmall: GoogleFonts.inter(
+      displaySmall: baseStyle.copyWith(
         fontSize: 24,
         fontWeight: FontWeight.w600,
-        color: textColor,
         height: 1.3,
       ),
-      headlineLarge: GoogleFonts.inter(
+      headlineLarge: baseStyle.copyWith(
         fontSize: 22,
         fontWeight: FontWeight.w600,
-        color: textColor,
         height: 1.3,
       ),
-      headlineMedium: GoogleFonts.inter(
+      headlineMedium: baseStyle.copyWith(
         fontSize: 20,
         fontWeight: FontWeight.w500,
-        color: textColor,
         height: 1.4,
       ),
-      headlineSmall: GoogleFonts.inter(
+      headlineSmall: baseStyle.copyWith(
         fontSize: 18,
         fontWeight: FontWeight.w500,
-        color: textColor,
         height: 1.4,
       ),
-      titleLarge: GoogleFonts.inter(
+      titleLarge: baseStyle.copyWith(
         fontSize: 16,
         fontWeight: FontWeight.w600,
-        color: textColor,
         height: 1.4,
       ),
-      titleMedium: GoogleFonts.inter(
+      titleMedium: baseStyle.copyWith(
         fontSize: 14,
         fontWeight: FontWeight.w500,
-        color: textColor,
         height: 1.4,
       ),
-      titleSmall: GoogleFonts.inter(
+      titleSmall: baseStyle.copyWith(
         fontSize: 12,
         fontWeight: FontWeight.w500,
-        color: textColor,
         height: 1.4,
       ),
-      bodyLarge: GoogleFonts.inter(
+      bodyLarge: baseStyle.copyWith(
         fontSize: 16,
         fontWeight: FontWeight.w400,
-        color: textColor,
         height: 1.5,
       ),
-      bodyMedium: GoogleFonts.inter(
+      bodyMedium: baseStyle.copyWith(
         fontSize: 14,
         fontWeight: FontWeight.w400,
-        color: textColor,
         height: 1.5,
       ),
-      bodySmall: GoogleFonts.inter(
+      bodySmall: baseStyle.copyWith(
         fontSize: 12,
         fontWeight: FontWeight.w400,
-        color: textColor,
         height: 1.5,
       ),
-      labelLarge: GoogleFonts.inter(
+      labelLarge: baseStyle.copyWith(
         fontSize: 14,
         fontWeight: FontWeight.w500,
-        color: textColor,
         height: 1.4,
       ),
-      labelMedium: GoogleFonts.inter(
+      labelMedium: baseStyle.copyWith(
         fontSize: 12,
         fontWeight: FontWeight.w500,
-        color: textColor,
         height: 1.4,
       ),
-      labelSmall: GoogleFonts.inter(
+      labelSmall: baseStyle.copyWith(
         fontSize: 10,
         fontWeight: FontWeight.w500,
-        color: textColor,
         height: 1.4,
       ),
     );
+  }
+
+  // Helper method to get Google Fonts with fallback handling
+  static TextStyle? getInterFont({
+    double? fontSize,
+    FontWeight? fontWeight,
+    Color? color,
+    double? height,
+  }) {
+    try {
+      return GoogleFonts.inter(
+        fontSize: fontSize,
+        fontWeight: fontWeight,
+        color: color,
+        height: height,
+      );
+    } catch (e) {
+      // Fallback to system fonts if Google Fonts fails
+      return TextStyle(
+        fontFamily: 'Inter',
+        fontSize: fontSize,
+        fontWeight: fontWeight,
+        color: color,
+        height: height,
+        fontFamilyFallback: const ['Segoe UI', 'Roboto', 'Arial', 'sans-serif'],
+      );
+    }
   }
 
   // Custom styles for specific components

@@ -77,7 +77,7 @@ class ApiService {
   Future<Cryptocurrency> getCryptocurrency(String symbol, {int days = 30}) async {
     try {
       final response = await _client.get(
-        Uri.parse('$fullBaseUrl/crypto/$symbol?days=$days'),
+        Uri.parse('$fullBaseUrl/crypto/info/$symbol?days=$days'),
         headers: _headers,
       ).timeout(const Duration(seconds: 30));
 
@@ -101,7 +101,7 @@ class ApiService {
   Future<Cryptocurrency> getCryptocurrencyDetails(String symbol) async {
     try {
       final response = await _client.get(
-        Uri.parse('$fullBaseUrl/crypto/details/$symbol'),
+        Uri.parse('$fullBaseUrl/crypto/info/$symbol'),
         headers: _headers,
       ).timeout(const Duration(seconds: 30));
 
@@ -337,12 +337,23 @@ class ApiService {
         
         if (apiResponse.success && apiResponse.data != null) {
           return apiResponse.data!
-              .map((newsData) => CryptoNews.fromJson(newsData))
+              .map((newsData) {
+                try {
+                  return CryptoNews.fromJson(newsData);
+                } catch (e) {
+                  print('Error parsing news item: $e');
+                  print('Problematic data: $newsData');
+                  return null;
+                }
+              })
+              .where((news) => news != null)
+              .cast<CryptoNews>()
               .toList();
         }
       }
       throw Exception('Failed to get crypto news: ${response.statusCode}');
     } catch (e) {
+      print('Network error getting crypto news: $e');
       throw Exception('Network error getting crypto news: $e');
     }
   }
@@ -363,13 +374,166 @@ class ApiService {
         
         if (apiResponse.success && apiResponse.data != null) {
           return apiResponse.data!
-              .map((newsData) => CryptoNews.fromJson(newsData))
+              .map((newsData) {
+                try {
+                  return CryptoNews.fromJson(newsData);
+                } catch (e) {
+                  print('Error parsing news item for $symbol: $e');
+                  print('Problematic data: $newsData');
+                  return null;
+                }
+              })
+              .where((news) => news != null)
+              .cast<CryptoNews>()
               .toList();
         }
       }
       throw Exception('Failed to get crypto news for $symbol: ${response.statusCode}');
     } catch (e) {
+      print('Network error getting crypto news for $symbol: $e');
       throw Exception('Network error getting crypto news for $symbol: $e');
+    }
+  }
+
+  // === REAL-TIME DATA ENDPOINTS ===
+
+  /// Get fresh cryptocurrency data (bypasses cache)
+  Future<Cryptocurrency> getFreshCryptocurrency(String symbol, {int days = 30}) async {
+    try {
+      final response = await _client.get(
+        Uri.parse('$fullBaseUrl/crypto/$symbol/fresh?days=$days'),
+        headers: _headers,
+      ).timeout(const Duration(seconds: 30));
+
+      if (response.statusCode == 200) {
+        final apiResponse = ApiResponse<Map<String, dynamic>>.fromJson(
+          json.decode(response.body),
+          (json) => json as Map<String, dynamic>,
+        );
+        
+        if (apiResponse.success && apiResponse.data != null) {
+          return Cryptocurrency.fromJson(apiResponse.data!);
+        }
+      }
+      throw Exception('Failed to get fresh cryptocurrency data: ${response.statusCode}');
+    } catch (e) {
+      throw Exception('Network error getting fresh cryptocurrency data: $e');
+    }
+  }
+
+  /// Get fresh chart data (bypasses cache)
+  Future<List<chart.ChartDataPoint>> getFreshChartData(String symbol, {int days = 30}) async {
+    try {
+      final response = await _client.get(
+        Uri.parse('$fullBaseUrl/crypto/$symbol/chart/fresh?days=$days'),
+        headers: _headers,
+      ).timeout(const Duration(seconds: 30));
+
+      if (response.statusCode == 200) {
+        final apiResponse = ApiResponse<List<dynamic>>.fromJson(
+          json.decode(response.body),
+          (json) => json as List<dynamic>,
+        );
+        
+        if (apiResponse.success && apiResponse.data != null) {
+          return apiResponse.data!
+              .map((item) => chart.ChartDataPoint.fromJson(item))
+              .toList();
+        }
+      }
+      throw Exception('Failed to get fresh chart data: ${response.statusCode}');
+    } catch (e) {
+      throw Exception('Network error getting fresh chart data: $e');
+    }
+  }
+
+  /// Clear all caches
+  Future<bool> clearCache() async {
+    try {
+      final response = await _client.post(
+        Uri.parse('$fullBaseUrl/cache/clear'),
+        headers: _headers,
+      ).timeout(const Duration(seconds: 10));
+
+      if (response.statusCode == 200) {
+        final apiResponse = ApiResponse<Map<String, dynamic>>.fromJson(
+          json.decode(response.body),
+          (json) => json as Map<String, dynamic>,
+        );
+        return apiResponse.success;
+      }
+      return false;
+    } catch (e) {
+      return false;
+    }
+  }
+
+  /// Trigger manual refresh for a specific symbol
+  Future<bool> manualRefresh(String symbol) async {
+    try {
+      final response = await _client.post(
+        Uri.parse('$fullBaseUrl/crypto/$symbol/refresh'),
+        headers: _headers,
+      ).timeout(const Duration(seconds: 30));
+
+      if (response.statusCode == 200) {
+        final apiResponse = ApiResponse<Map<String, dynamic>>.fromJson(
+          json.decode(response.body),
+          (json) => json as Map<String, dynamic>,
+        );
+        return apiResponse.success;
+      }
+      return false;
+    } catch (e) {
+      return false;
+    }
+  }
+
+  /// Get system status and data freshness information
+  Future<Map<String, dynamic>> getSystemStatus() async {
+    try {
+      final response = await _client.get(
+        Uri.parse('$fullBaseUrl/status'),
+        headers: _headers,
+      ).timeout(const Duration(seconds: 10));
+
+      if (response.statusCode == 200) {
+        final apiResponse = ApiResponse<Map<String, dynamic>>.fromJson(
+          json.decode(response.body),
+          (json) => json as Map<String, dynamic>,
+        );
+        
+        if (apiResponse.success && apiResponse.data != null) {
+          return apiResponse.data!;
+        }
+      }
+      return {'status': 'unknown', 'cacheHealth': 'unknown'};
+    } catch (e) {
+      return {'status': 'error', 'error': e.toString()};
+    }
+  }
+
+  /// Get data status for a specific symbol
+  Future<Map<String, dynamic>> getDataStatus(String symbol) async {
+    try {
+      final response = await _client.get(
+        Uri.parse('$fullBaseUrl/crypto/$symbol/status'),
+        headers: _headers,
+      ).timeout(const Duration(seconds: 10));
+
+      if (response.statusCode == 200) {
+        final apiResponse = ApiResponse<Map<String, dynamic>>.fromJson(
+          json.decode(response.body),
+          (json) => json as Map<String, dynamic>,
+        );
+        
+        if (apiResponse.success && apiResponse.data != null) {
+          return apiResponse.data!;
+        }
+      }
+      return {'status': 'unknown'};
+    } catch (e) {
+      return {'status': 'error', 'error': e.toString()};
     }
   }
 
@@ -377,6 +541,20 @@ class ApiService {
 
   /// Test backend connection
   Future<bool> testConnection() async {
+    try {
+      final response = await _client.get(
+        Uri.parse('$fullBaseUrl/crypto/analysis-types'),
+        headers: _headers,
+      ).timeout(const Duration(seconds: 10));
+
+      return response.statusCode == 200;
+    } catch (e) {
+      return false;
+    }
+  }
+
+  /// Check if the backend is reachable and responding
+  Future<bool> checkHealth() async {
     try {
       final response = await _client.get(
         Uri.parse('$fullBaseUrl/crypto/analysis-types'),
@@ -403,6 +581,36 @@ class ApiService {
       return {'status': 'DOWN', 'details': 'HTTP ${response.statusCode}'};
     } catch (e) {
       return {'status': 'DOWN', 'details': e.toString()};
+    }
+  }
+
+  // === SIMILAR CRYPTOCURRENCIES FINDER ===
+
+  /// Find similar cryptocurrencies using AI-powered analysis
+  Future<Map<String, dynamic>> findSimilarCryptocurrencies(
+    String symbol, {
+    int limit = 5,
+    bool includeAnalysis = true,
+  }) async {
+    try {
+      final response = await _client.get(
+        Uri.parse('$fullBaseUrl/crypto/similar/$symbol?limit=$limit&includeAnalysis=$includeAnalysis'),
+        headers: _headers,
+      ).timeout(const Duration(seconds: 60));
+
+      if (response.statusCode == 200) {
+        final apiResponse = ApiResponse<Map<String, dynamic>>.fromJson(
+          json.decode(response.body),
+          (json) => json as Map<String, dynamic>,
+        );
+        
+        if (apiResponse.success && apiResponse.data != null) {
+          return apiResponse.data!;
+        }
+      }
+      throw Exception('Failed to find similar cryptocurrencies: ${response.statusCode}');
+    } catch (e) {
+      throw Exception('Network error finding similar cryptocurrencies: $e');
     }
   }
 

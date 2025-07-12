@@ -125,9 +125,39 @@ class _MainLayoutState extends State<MainLayout> {
                   route: '/news',
                 ),
                 _buildNavItem(
+                  icon: FontAwesomeIcons.bookmark,
+                  label: 'Bookmarks',
+                  route: '/bookmarks',
+                ),
+                _buildNavItem(
                   icon: FontAwesomeIcons.gear,
                   label: 'Settings',
                   route: '/settings',
+                ),
+                const SizedBox(height: 8),
+                // Professional Trading Section
+                if (!_isCollapsed) ...[
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                    child: Text(
+                      'Professional Trading',
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                        color: Theme.of(context).colorScheme.onSurface.withOpacity(0.6),
+                      ),
+                    ),
+                  ),
+                ],
+                _buildNavItem(
+                  icon: FontAwesomeIcons.chartArea,
+                  label: 'Pro Dashboard',
+                  route: '/pro-trading',
+                ),
+                _buildNavItem(
+                  icon: FontAwesomeIcons.filter,
+                  label: 'Market Screener',
+                  route: '/screener',
                 ),
               ],
             ),

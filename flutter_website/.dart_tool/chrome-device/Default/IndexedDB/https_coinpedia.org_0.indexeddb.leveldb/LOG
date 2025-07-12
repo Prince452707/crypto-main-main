@@ -1,0 +1,6 @@
+2025/07/03-14:44:36.330 260c Creating DB C:\Users\PRINCE~1\AppData\Local\Temp\flutter_tools.2aeede75\flutter_tools_chrome_device.aaeb8b81\Default\IndexedDB\https_coinpedia.org_0.indexeddb.leveldb since it was missing.
+2025/07/03-14:44:36.339 260c Reusing MANIFEST C:\Users\PRINCE~1\AppData\Local\Temp\flutter_tools.2aeede75\flutter_tools_chrome_device.aaeb8b81\Default\IndexedDB\https_coinpedia.org_0.indexeddb.leveldb/MANIFEST-000001
+2025/07/03-14:44:36.354 9434 Level-0 table #5: started
+2025/07/03-14:44:36.359 9434 Level-0 table #5: 656 bytes OK
+2025/07/03-14:44:36.361 9434 Delete type=0 #3
+2025/07/03-14:44:36.362 9434 Manual compaction at level-0 from '\x00\x01\x00\x00\x00' @ 72057594037927935 : 1 .. '\x00\x02\x00\x00\x00' @ 0 : 0; will stop at (end)

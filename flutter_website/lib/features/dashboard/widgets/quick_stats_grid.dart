@@ -14,60 +14,75 @@ class QuickStatsGrid extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     if (isLoading) {
-      return GridView.count(
-        shrinkWrap: true,
-        physics: const NeverScrollableScrollPhysics(),
-        crossAxisCount: 4,
-        crossAxisSpacing: 16,
-        mainAxisSpacing: 16,
-        childAspectRatio: 1.5,
-        children: List.generate(4, (index) => _buildLoadingCard(context)),
+      return LayoutBuilder(
+        builder: (context, constraints) {
+          int crossAxisCount = constraints.maxWidth > 800 ? 4 : 2;
+          double childAspectRatio = constraints.maxWidth > 800 ? 1.6 : 1.4;
+          
+          return GridView.count(
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
+            crossAxisCount: crossAxisCount,
+            crossAxisSpacing: 16,
+            mainAxisSpacing: 16,
+            childAspectRatio: childAspectRatio,
+            children: List.generate(4, (index) => _buildShimmerLoadingCard(context)),
+          );
+        },
       );
     }
 
     final stats = _calculateStats();
     
-    return GridView.count(
-      shrinkWrap: true,
-      physics: const NeverScrollableScrollPhysics(),
-      crossAxisCount: 4,
-      crossAxisSpacing: 16,
-      mainAxisSpacing: 16,
-      childAspectRatio: 1.5,
-      children: [
-        _buildStatCard(
-          context,
-          title: 'Total Market Cap',
-          value: _formatCurrency(stats['totalMarketCap'] ?? 0),
-          change: '${(stats['marketCapChange'] ?? 0) >= 0 ? '+' : ''}${stats['marketCapChange']?.toStringAsFixed(1) ?? '0.0'}%',
-          isPositive: (stats['marketCapChange'] ?? 0) >= 0,
-          icon: Icons.public,
-        ),
-        _buildStatCard(
-          context,
-          title: '24h Volume',
-          value: _formatCurrency(stats['totalVolume'] ?? 0),
-          change: '${(stats['volumeChange'] ?? 0) >= 0 ? '+' : ''}${stats['volumeChange']?.toStringAsFixed(1) ?? '0.0'}%',
-          isPositive: (stats['volumeChange'] ?? 0) >= 0,
-          icon: Icons.swap_horiz,
-        ),
-        _buildStatCard(
-          context,
-          title: 'Bitcoin Dominance',
-          value: '${stats['btcDominance']?.toStringAsFixed(1) ?? '0.0'}%',
-          change: '${(stats['btcDominanceChange'] ?? 0) >= 0 ? '+' : ''}${stats['btcDominanceChange']?.toStringAsFixed(1) ?? '0.0'}%',
-          isPositive: (stats['btcDominanceChange'] ?? 0) >= 0,
-          icon: Icons.currency_bitcoin,
-        ),
-        _buildStatCard(
-          context,
-          title: 'Active Cryptos',
-          value: marketData.length.toString(),
-          change: '+${marketData.where((c) => c.percentChange24h != null && c.percentChange24h! > 0).length}',
-          isPositive: true,
-          icon: Icons.account_balance_wallet,
-        ),
-      ],
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        // Adjust crossAxisCount based on screen width
+        int crossAxisCount = constraints.maxWidth > 800 ? 4 : 2;
+        double childAspectRatio = constraints.maxWidth > 800 ? 1.6 : 1.4;
+        
+        return GridView.count(
+          shrinkWrap: true,
+          physics: const NeverScrollableScrollPhysics(),
+          crossAxisCount: crossAxisCount,
+          crossAxisSpacing: 16,
+          mainAxisSpacing: 16,
+          childAspectRatio: childAspectRatio,
+          children: [
+            _buildStatCard(
+              context,
+              title: 'Total Market Cap',
+              value: _formatCurrency(stats['totalMarketCap'] ?? 0),
+              change: '${(stats['marketCapChange'] ?? 0) >= 0 ? '+' : ''}${stats['marketCapChange']?.toStringAsFixed(1) ?? '0.0'}%',
+              isPositive: (stats['marketCapChange'] ?? 0) >= 0,
+              icon: Icons.public,
+            ),
+            _buildStatCard(
+              context,
+              title: '24h Volume',
+              value: _formatCurrency(stats['totalVolume'] ?? 0),
+              change: '${(stats['volumeChange'] ?? 0) >= 0 ? '+' : ''}${stats['volumeChange']?.toStringAsFixed(1) ?? '0.0'}%',
+              isPositive: (stats['volumeChange'] ?? 0) >= 0,
+              icon: Icons.swap_horiz,
+            ),
+            _buildStatCard(
+              context,
+              title: 'Bitcoin Dominance',
+              value: '${stats['btcDominance']?.toStringAsFixed(1) ?? '0.0'}%',
+              change: '${(stats['btcDominanceChange'] ?? 0) >= 0 ? '+' : ''}${stats['btcDominanceChange']?.toStringAsFixed(1) ?? '0.0'}%',
+              isPositive: (stats['btcDominanceChange'] ?? 0) >= 0,
+              icon: Icons.currency_bitcoin,
+            ),
+            _buildStatCard(
+              context,
+              title: 'Active Cryptos',
+              value: marketData.length.toString(),
+              change: '+${marketData.where((c) => c.percentChange24h != null && c.percentChange24h! > 0).length}',
+              isPositive: true,
+              icon: Icons.account_balance_wallet,
+            ),
+          ],
+        );
+      },
     );
   }
 
@@ -97,54 +112,68 @@ class QuickStatsGrid extends StatelessWidget {
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
         children: [
           Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               Container(
-                width: 48,
-                height: 48,
+                width: 40,
+                height: 40,
                 decoration: BoxDecoration(
                   color: Theme.of(context).colorScheme.primary.withOpacity(0.1),
-                  borderRadius: BorderRadius.circular(12),
+                  borderRadius: BorderRadius.circular(10),
                 ),
                 child: Center(
                   child: Icon(
                     icon,
-                    size: 20,
+                    size: 18,
                     color: Theme.of(context).colorScheme.primary,
                   ),
                 ),
               ),
-              const Spacer(),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                decoration: BoxDecoration(
-                  color: (isPositive ? Colors.green : Colors.red).withOpacity(0.1),
-                  borderRadius: BorderRadius.circular(6),
-                ),
-                child: Text(
-                  change,
-                  style: TextStyle(
-                    fontSize: 12,
-                    fontWeight: FontWeight.w600,
-                    color: isPositive ? Colors.green : Colors.red,
+              Flexible(
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+                  decoration: BoxDecoration(
+                    color: (isPositive ? Colors.green : Colors.red).withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                  child: Text(
+                    change,
+                    style: TextStyle(
+                      fontSize: 10,
+                      fontWeight: FontWeight.w600,
+                      color: isPositive ? Colors.green : Colors.red,
+                    ),
+                    overflow: TextOverflow.ellipsis,
                   ),
                 ),
               ),
             ],
           ),
-          const SizedBox(height: 16),
-          Text(
-            value,
-            style: Theme.of(context).textTheme.headlineMedium?.copyWith(
-              fontWeight: FontWeight.bold,
+          const Spacer(),
+          Flexible(
+            child: Text(
+              value,
+              style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                fontWeight: FontWeight.bold,
+                fontSize: 18,
+              ),
+              overflow: TextOverflow.ellipsis,
+              maxLines: 1,
             ),
           ),
-          const SizedBox(height: 4),
-          Text(
-            title,
-            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-              color: Theme.of(context).colorScheme.onSurface.withOpacity(0.7),
+          const SizedBox(height: 2),
+          Flexible(
+            child: Text(
+              title,
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                color: Theme.of(context).colorScheme.onSurface.withOpacity(0.7),
+                fontSize: 11,
+              ),
+              overflow: TextOverflow.ellipsis,
+              maxLines: 1,
             ),
           ),
         ],
@@ -152,12 +181,15 @@ class QuickStatsGrid extends StatelessWidget {
     );
   }
 
-  Widget _buildLoadingCard(BuildContext context) {
+  Widget _buildShimmerLoadingCard(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        color: Theme.of(context).cardColor,
+        color: Theme.of(context).colorScheme.surface,
         borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: Theme.of(context).colorScheme.outline.withOpacity(0.2),
+        ),
         boxShadow: [
           BoxShadow(
             color: Colors.black.withOpacity(0.05),
@@ -168,43 +200,48 @@ class QuickStatsGrid extends StatelessWidget {
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
         children: [
           Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
+              // Icon placeholder with shimmer
               Container(
-                width: 24,
-                height: 24,
+                width: 40,
+                height: 40,
                 decoration: BoxDecoration(
-                  color: Colors.grey[300],
-                  borderRadius: BorderRadius.circular(4),
+                  color: Colors.grey[300]?.withOpacity(0.6),
+                  borderRadius: BorderRadius.circular(10),
                 ),
               ),
-              const SizedBox(width: 8),
+              // Change badge placeholder
               Container(
-                width: 80,
-                height: 14,
+                width: 60,
+                height: 20,
                 decoration: BoxDecoration(
-                  color: Colors.grey[300],
+                  color: Colors.grey[300]?.withOpacity(0.6),
                   borderRadius: BorderRadius.circular(4),
                 ),
               ),
             ],
           ),
           const Spacer(),
+          // Value placeholder
           Container(
-            width: 100,
+            width: double.infinity,
             height: 24,
             decoration: BoxDecoration(
-              color: Colors.grey[300],
+              color: Colors.grey[300]?.withOpacity(0.6),
               borderRadius: BorderRadius.circular(4),
             ),
           ),
           const SizedBox(height: 4),
+          // Title placeholder
           Container(
-            width: 60,
+            width: 120,
             height: 16,
             decoration: BoxDecoration(
-              color: Colors.grey[300],
+              color: Colors.grey[300]?.withOpacity(0.6),
               borderRadius: BorderRadius.circular(4),
             ),
           ),

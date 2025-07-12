@@ -38,28 +38,13 @@ public class CryptoNews {
     private SourceInfo sourceInfo;
     
     @JsonProperty("lang")
-    private String language;
+    private String lang;
     
     @JsonProperty("tags")
     private String tags;
     
     @JsonProperty("categories")
     private String categories;
-    
-    // Compatibility method for API service
-    public void setLang(String lang) {
-        this.language = lang;
-    }
-    
-    public String getLang() {
-        return this.language;
-    }
-    
-    // Hide the auto-generated getLanguage method from JSON serialization
-    @JsonIgnore
-    public String getLanguage() {
-        return this.language;
-    }
     
     // Computed fields
     private LocalDateTime publishedDate;
@@ -76,7 +61,7 @@ public class CryptoNews {
         private String image;
         
         @JsonProperty("lang")
-        private String language;
+        private String lang;
     }
     
     // Helper methods

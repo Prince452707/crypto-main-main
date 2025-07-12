@@ -11,7 +11,7 @@ import java.util.concurrent.ConcurrentHashMap;
 
 public class RateLimitFilter implements WebFilter {
     private final Map<String, RequestCounter> counters = new ConcurrentHashMap<>();
-    private static final int MAX_REQUESTS = 20;
+    private static final int MAX_REQUESTS = 100; // Increased from 20 to 100
     private static final Duration WINDOW = Duration.ofMinutes(1);
 
     private static class RequestCounter {

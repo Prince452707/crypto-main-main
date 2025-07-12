@@ -34,14 +34,28 @@ class CryptoNews {
       publishedOn: DateTime.fromMillisecondsSinceEpoch(
         (json['publishedOn'] as num?)?.toInt() ?? 0,
       ),
-      categories: (json['categories'] as List<dynamic>?)
-          ?.map((e) => e.toString())
-          .toList() ?? [],
-      tags: (json['tags'] as List<dynamic>?)
-          ?.map((e) => e.toString())
-          .toList() ?? [],
+      categories: _parseStringOrList(json['categories']),
+      tags: _parseStringOrList(json['tags']),
       lang: json['lang']?.toString() ?? 'EN',
     );
+  }
+
+  // Helper method to parse either a string or list into a list of strings
+  static List<String> _parseStringOrList(dynamic value) {
+    if (value == null) return [];
+    
+    if (value is List) {
+      return value.map((e) => e.toString()).toList();
+    } else if (value is String) {
+      // Handle comma-separated string or single category
+      if (value.contains(',')) {
+        return value.split(',').map((e) => e.trim()).toList();
+      } else {
+        return [value];
+      }
+    }
+    
+    return [value.toString()];
   }
 
   Map<String, dynamic> toJson() {

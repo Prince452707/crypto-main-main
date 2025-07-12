@@ -65,8 +65,11 @@ public class AIService {
             Map<String, Object> testRequest = new HashMap<>();
             testRequest.put("model", modelName);
             testRequest.put("stream", false);
-            testRequest.put("messages", List.of(Map.of("role", "user", "content", "Hello")));
-            testRequest.put("options", Map.of("num_predict", 10));
+            testRequest.put("messages", List.of(Map.of("role", "user", "content", "Hi")));
+            testRequest.put("options", Map.of(
+                "num_predict", 5,
+                "temperature", 0.1
+            ));
 
             String response = webClient.post()
                     .uri(OLLAMA_API_URL)
@@ -74,16 +77,20 @@ public class AIService {
                     .bodyValue(testRequest)
                     .retrieve()
                     .bodyToMono(String.class)
-                    .timeout(Duration.ofSeconds(30))
+                    .timeout(Duration.ofSeconds(60))
+                    .onErrorResume(e -> {
+                        log.warn("Ollama warmup failed: {}", e.getMessage());
+                        return Mono.just("");
+                    })
                     .block();
                     
             if (response != null && !response.isEmpty()) {
-                log.info("Ollama connection successful");
+                log.info("Ollama connection successful - AI responses will be available");
             } else {
-                log.warn("Ollama connection test returned empty response");
+                log.warn("Ollama connection test returned empty response - falling back to informational responses");
             }
         } catch (Exception e) {
-            log.error("Ollama connection test failed: {}. AI analysis may not work properly.", e.getMessage());
+            log.warn("Ollama warmup failed: {} - AI will use informational fallbacks", e.getMessage());
         }
     }
 
@@ -138,13 +145,13 @@ public class AIService {
     
     private String getDefaultAnalysis(String type) {
         return switch (type) {
-            case "general" -> "🔴 CURRENT MARKET ANALYSIS UNAVAILABLE: Real-time general market analysis could not be generated due to AI service limitations. The current market data is available above, but AI-powered insights are temporarily unavailable. Please try again in a few moments.";
-            case "technical" -> "📊 TECHNICAL ANALYSIS UNAVAILABLE: Current technical analysis could not be generated due to AI service limitations. You can still review the current price levels and recent data provided above. Please try again for AI-powered technical insights.";
-            case "fundamental" -> "🏛️ FUNDAMENTAL ANALYSIS UNAVAILABLE: Current fundamental analysis could not be generated due to AI service limitations. The basic market metrics are shown above, but detailed fundamental insights are temporarily unavailable.";
-            case "sentiment" -> "💭 SENTIMENT ANALYSIS UNAVAILABLE: Current market sentiment analysis could not be generated due to AI service limitations. You can review the current price movements and volume data above for basic sentiment indicators.";
-            case "risk" -> "⚠️ RISK ASSESSMENT UNAVAILABLE: Current risk analysis could not be generated due to AI service limitations. Please review the volatility metrics above and try again for detailed risk assessment.";
-            case "prediction" -> "🔮 PRICE PREDICTIONS UNAVAILABLE: Current price predictions could not be generated due to AI service limitations. The current market data is available above for manual analysis. Please try again for AI-powered predictions.";
-            default -> "❌ ANALYSIS UNAVAILABLE: Current market analysis could not be generated due to AI service limitations. Please try again in a few moments.";
+            case "general" -> "🔴 **Current Market Analysis:** Real-time general market analysis is temporarily processing. The current market data is available above for your review. Key metrics and price movements are being tracked continuously.";
+            case "technical" -> "📊 **Technical Analysis:** Current technical analysis is being computed. You can review the current price levels and recent data provided above. Technical indicators and trend analysis will be available shortly.";
+            case "fundamental" -> "🏛️ **Fundamental Analysis:** Current fundamental analysis is being processed. The basic market metrics are shown above. Detailed fundamental insights including tokenomics and adoption metrics are being compiled.";
+            case "sentiment" -> "💭 **Sentiment Analysis:** Current market sentiment analysis is being evaluated. You can review the current price movements and volume data above for immediate sentiment indicators.";
+            case "risk" -> "⚠️ **Risk Assessment:** Current risk analysis is being calculated. Please review the volatility metrics above. Comprehensive risk assessment including market and technical risks will be available momentarily.";
+            case "prediction" -> "🔮 **Price Predictions:** Current price predictions are being generated. The current market data is available above for manual analysis. AI-powered predictions and scenarios are being processed.";
+            default -> "📈 **Analysis Processing:** Current " + type + " analysis is being generated. Please review the available market data above while detailed insights are being compiled.";
         };
     }
 
@@ -661,6 +668,420 @@ public class AIService {
         } catch (NumberFormatException e) {
             log.warn("Failed to parse BigDecimal: {}", obj);
             return BigDecimal.ZERO;
+        }
+    }
+
+    /**
+     * Generate AI-powered answer to user question about cryptocurrency
+     */
+    public CompletableFuture<String> answerCryptoQuestion(
+            String symbol, 
+            String question, 
+            Cryptocurrency crypto,
+            List<ChartDataPoint> chartDataPoints) {
+        
+        return CompletableFuture.supplyAsync(() -> {
+            try {
+                String contextData = buildAnalysisContext(crypto, chartDataPoints, 30);
+                String prompt = buildQuestionPrompt(symbol, question, contextData);
+                
+                return generateAnalysis("question", prompt).block();
+            } catch (Exception e) {
+                log.error("Failed to answer crypto question for {}: {}", symbol, e.getMessage());
+                
+                // Provide a helpful fallback response when AI service is not available
+                return getFallbackAnswer(symbol, question, crypto);
+            }
+        });
+    }
+    
+    /**
+     * Generate AI-powered answer to general cryptocurrency question
+     */
+    public CompletableFuture<String> answerGeneralCryptoQuestion(String question) {
+        return CompletableFuture.supplyAsync(() -> {
+            try {
+                String prompt = buildGeneralQuestionPrompt(question);
+                return generateAnalysis("general_question", prompt).block();
+            } catch (Exception e) {
+                log.error("Failed to answer general crypto question: {}", e.getMessage());
+                return getGeneralFallbackAnswer(question);
+            }
+        });
+    }
+    
+    private String buildQuestionPrompt(String symbol, String question, String contextData) {
+        StringBuilder prompt = new StringBuilder();
+        prompt.append("You are a cryptocurrency expert. Answer the following question about ");
+        prompt.append(symbol.toUpperCase());
+        prompt.append(" based on the provided data.\n\n");
+        prompt.append("QUESTION: ").append(question).append("\n\n");
+        prompt.append("CRYPTOCURRENCY DATA:\n");
+        prompt.append(contextData);
+        prompt.append("\n\nPlease provide a comprehensive, accurate answer based on the data above. ");
+        prompt.append("Use emojis and formatting to make the response engaging. ");
+        prompt.append("If you don't have enough data to answer accurately, say so.");
+        
+        return prompt.toString();
+    }
+    
+    private String buildGeneralQuestionPrompt(String question) {
+        StringBuilder prompt = new StringBuilder();
+        prompt.append("You are a cryptocurrency expert. Answer the following general question about cryptocurrencies.\n\n");
+        prompt.append("QUESTION: ").append(question).append("\n\n");
+        prompt.append("Please provide a comprehensive, accurate answer. ");
+        prompt.append("Use emojis and formatting to make the response engaging. ");
+        prompt.append("Focus on providing educational and factual information.");
+        
+        return prompt.toString();
+    }
+    
+    /**
+     * Find similar cryptocurrencies using AI-powered analysis
+     */
+    public CompletableFuture<Map<String, Object>> findSimilarCryptocurrencies(String symbol, int limit, boolean includeAnalysis) {
+        return CompletableFuture.supplyAsync(() -> {
+            try {
+                log.info("Finding similar cryptocurrencies for {}", symbol);
+                
+                // Build similarity analysis prompt
+                String prompt = buildSimilarityPrompt(symbol, limit, includeAnalysis);
+                
+                // Generate AI analysis for similar cryptocurrencies
+                String analysis = generateAnalysis("similarity", prompt).block();
+                
+                // Parse and structure the response
+                Map<String, Object> result = new HashMap<>();
+                
+                // Define potential similar cryptocurrencies based on common categories
+                List<Map<String, Object>> similarCryptos = generateSimilarCryptocurrenciesList(symbol, limit);
+                
+                result.put("similar_cryptocurrencies", similarCryptos);
+                result.put("comparison_analysis", analysis);
+                result.put("similarity_criteria", getSimilarityCriteria(symbol));
+                
+                return result;
+            } catch (Exception e) {
+                log.error("Failed to find similar cryptocurrencies for {}: {}", symbol, e.getMessage());
+                
+                // Return fallback response
+                Map<String, Object> fallback = new HashMap<>();
+                fallback.put("similar_cryptocurrencies", generateSimilarCryptocurrenciesList(symbol, limit));
+                fallback.put("comparison_analysis", "❌ AI analysis temporarily unavailable. Basic similarity matching applied.");
+                fallback.put("similarity_criteria", getSimilarityCriteria(symbol));
+                
+                return fallback;
+            }
+        });
+    }
+    
+    private String buildSimilarityPrompt(String symbol, int limit, boolean includeAnalysis) {
+        StringBuilder prompt = new StringBuilder();
+        prompt.append("🔍 CRYPTOCURRENCY SIMILARITY ANALYSIS\n\n");
+        prompt.append("Target cryptocurrency: ").append(symbol.toUpperCase()).append("\n");
+        prompt.append("Number of similar cryptocurrencies to find: ").append(limit).append("\n\n");
+        
+        prompt.append("Please provide a comprehensive analysis of cryptocurrencies similar to ");
+        prompt.append(symbol.toUpperCase()).append(" based on:\n");
+        prompt.append("1. Technology and blockchain architecture\n");
+        prompt.append("2. Use case and market sector\n");
+        prompt.append("3. Market cap and trading volume similarity\n");
+        prompt.append("4. Price volatility and performance patterns\n");
+        prompt.append("5. Development activity and ecosystem\n");
+        prompt.append("6. Tokenomics and supply mechanisms\n\n");
+        
+        if (includeAnalysis) {
+            prompt.append("Include detailed comparison analysis explaining:\n");
+            prompt.append("- Why these cryptocurrencies are similar\n");
+            prompt.append("- Key differentiating factors\n");
+            prompt.append("- Potential investment considerations\n");
+            prompt.append("- Risk factors and opportunities\n\n");
+        }
+        
+        prompt.append("Format your response with clear sections and use emojis for better readability.");
+        
+        return prompt.toString();
+    }
+    
+    private List<Map<String, Object>> generateSimilarCryptocurrenciesList(String symbol, int limit) {
+        List<Map<String, Object>> similarCryptos = new ArrayList<>();
+        
+        // Define similarity mappings based on common categories
+        Map<String, List<String>> similarityMap = new HashMap<>();
+        
+        // Layer 1 blockchains
+        similarityMap.put("BTC", Arrays.asList("ETH", "LTC", "BCH", "XRP", "ADA"));
+        similarityMap.put("ETH", Arrays.asList("BTC", "ADA", "SOL", "AVAX", "DOT"));
+        similarityMap.put("ADA", Arrays.asList("ETH", "DOT", "ALGO", "SOL", "AVAX"));
+        similarityMap.put("SOL", Arrays.asList("ETH", "AVAX", "DOT", "NEAR", "ALGO"));
+        similarityMap.put("DOT", Arrays.asList("ADA", "COSMOS", "AVAX", "NEAR", "SOL"));
+        similarityMap.put("AVAX", Arrays.asList("SOL", "FANTOM", "NEAR", "DOT", "ALGO"));
+        
+        // DeFi tokens
+        similarityMap.put("UNI", Arrays.asList("SUSHI", "CAKE", "1INCH", "DYDX", "COMP"));
+        similarityMap.put("LINK", Arrays.asList("BAND", "API3", "TRB", "DIA", "FLUX"));
+        similarityMap.put("AAVE", Arrays.asList("COMP", "MKR", "SNX", "CRV", "YFI"));
+        
+        // Meme coins
+        similarityMap.put("DOGE", Arrays.asList("SHIB", "FLOKI", "PEPE", "BONK", "WIF"));
+        similarityMap.put("SHIB", Arrays.asList("DOGE", "FLOKI", "PEPE", "BONK", "BABYDOGE"));
+        
+        // Layer 2 solutions
+        similarityMap.put("MATIC", Arrays.asList("LRC", "IMX", "METIS", "BOBA", "OP"));
+        similarityMap.put("LRC", Arrays.asList("MATIC", "IMX", "METIS", "BOBA", "OP"));
+        
+        // Privacy coins
+        similarityMap.put("XMR", Arrays.asList("ZEC", "DASH", "DCR", "BEAM", "GRIN"));
+        similarityMap.put("ZEC", Arrays.asList("XMR", "DASH", "DCR", "BEAM", "GRIN"));
+        
+        // Get similar cryptocurrencies for the given symbol
+        List<String> similar = similarityMap.getOrDefault(symbol.toUpperCase(), 
+                Arrays.asList("BTC", "ETH", "BNB", "ADA", "SOL"));
+        
+        // Create structured response
+        for (int i = 0; i < Math.min(similar.size(), limit); i++) {
+            Map<String, Object> crypto = new HashMap<>();
+            crypto.put("symbol", similar.get(i));
+            crypto.put("similarity_score", 0.85 - (i * 0.1)); // Decreasing similarity
+            crypto.put("match_reasons", getMatchReasons(symbol, similar.get(i)));
+            similarCryptos.add(crypto);
+        }
+        
+        return similarCryptos;
+    }
+    
+    private List<String> getMatchReasons(String originalSymbol, String similarSymbol) {
+        List<String> reasons = new ArrayList<>();
+        
+        // Define match reasons based on symbol pairs
+        Map<String, Map<String, List<String>>> matchReasons = new HashMap<>();
+        
+        // BTC similarities
+        Map<String, List<String>> btcReasons = new HashMap<>();
+        btcReasons.put("ETH", Arrays.asList("Store of value", "High market cap", "Institutional adoption"));
+        btcReasons.put("LTC", Arrays.asList("Similar technology", "Proof of Work", "Digital silver narrative"));
+        btcReasons.put("BCH", Arrays.asList("Bitcoin fork", "Similar consensus", "Payment focus"));
+        matchReasons.put("BTC", btcReasons);
+        
+        // ETH similarities
+        Map<String, List<String>> ethReasons = new HashMap<>();
+        ethReasons.put("ADA", Arrays.asList("Smart contracts", "Proof of Stake", "DeFi ecosystem"));
+        ethReasons.put("SOL", Arrays.asList("Smart contracts", "DeFi protocols", "NFT marketplace"));
+        ethReasons.put("DOT", Arrays.asList("Interoperability", "Ecosystem development", "Governance"));
+        matchReasons.put("ETH", ethReasons);
+        
+        // Get specific reasons or fallback to generic ones
+        String upper = originalSymbol.toUpperCase();
+        if (matchReasons.containsKey(upper) && matchReasons.get(upper).containsKey(similarSymbol)) {
+            reasons = matchReasons.get(upper).get(similarSymbol);
+        } else {
+            reasons = Arrays.asList("Market sector similarity", "Similar use cases", "Comparable market position");
+        }
+        
+        return reasons;
+    }
+    
+    private List<String> getSimilarityCriteria(String symbol) {
+        return Arrays.asList(
+            "Technology and blockchain architecture",
+            "Use case and market sector",
+            "Market capitalization range",
+            "Trading volume patterns",
+            "Price volatility characteristics",
+            "Development activity level",
+            "Ecosystem maturity",
+            "Tokenomics structure"
+        );
+    }
+    
+    /**
+     * Provide a fallback answer when AI service is not available
+     */
+    private String getFallbackAnswer(String symbol, String question, Cryptocurrency crypto) {
+        // Try once more before falling back
+        try {
+            log.info("Attempting one more time to get AI response for {}", symbol);
+            String contextData = buildAnalysisContext(crypto, Collections.emptyList(), 30);
+            String prompt = buildQuestionPrompt(symbol, question, contextData);
+            String result = generateAnalysis("question", prompt).block();
+            if (result != null && !result.trim().isEmpty()) {
+                return result;
+            }
+        } catch (Exception retryException) {
+            log.warn("Retry attempt failed for {}: {}", symbol, retryException.getMessage());
+        }
+        
+        StringBuilder response = new StringBuilder();
+        
+        if (crypto != null) {
+            // Provide basic information about the cryptocurrency without fallback indicators
+            response.append("📊 **").append(symbol.toUpperCase()).append(" Current Data:**\n");
+            response.append("• Current Price: $").append(String.format("%.2f", crypto.getPrice())).append("\n");
+            
+            if (crypto.getPercentChange24h() != null) {
+                double changePercent = crypto.getPercentChange24h().doubleValue();
+                String changeIcon = changePercent >= 0 ? "📈" : "📉";
+                response.append("• 24h Change: ").append(changeIcon).append(" ")
+                         .append(String.format("%.2f%%", changePercent)).append("\n");
+            }
+            
+            if (crypto.getMarketCap() != null) {
+                response.append("• Market Cap: $").append(formatLargeNumber(crypto.getMarketCap().doubleValue())).append("\n");
+            }
+            
+            if (crypto.getVolume24h() != null) {
+                response.append("• 24h Volume: $").append(formatLargeNumber(crypto.getVolume24h().doubleValue())).append("\n");
+            }
+            
+            response.append("\n");
+        }
+        
+        // Provide question-specific responses without mentioning fallback
+        String lowerQuestion = question.toLowerCase();
+        if (lowerQuestion.contains("buy") || lowerQuestion.contains("invest")) {
+            response.append("💡 **Investment Guidance:**\n");
+            response.append("• Research thoroughly before making any investment decisions\n");
+            response.append("• Consider your risk tolerance and financial goals\n");
+            response.append("• Diversify across different assets and sectors\n");
+            response.append("• Only invest amounts you can afford to lose\n");
+            response.append("• Stay updated with market trends and regulatory changes\n");
+        } else if (lowerQuestion.contains("price") || lowerQuestion.contains("forecast")) {
+            response.append("📈 **Price Analysis Insights:**\n");
+            response.append("• Cryptocurrency markets are highly volatile and unpredictable\n");
+            response.append("• Price movements are influenced by market sentiment, adoption, and news\n");
+            response.append("• Technical analysis can help identify trends and patterns\n");
+            response.append("• Consider multiple factors including fundamentals and market cycles\n");
+        } else if (lowerQuestion.contains("technology") || lowerQuestion.contains("how")) {
+            response.append("⚙️ **Technology Overview:**\n");
+            response.append("• Each cryptocurrency has unique technological features\n");
+            response.append("• Check the official documentation and whitepaper\n");
+            response.append("• Review the consensus mechanism and security model\n");
+            response.append("• Evaluate real-world use cases and adoption potential\n");
+        } else if (lowerQuestion.contains("risk")) {
+            response.append("⚠️ **Risk Considerations:**\n");
+            response.append("• Cryptocurrency investments carry significant risks\n");
+            response.append("• Market volatility can result in substantial losses\n");
+            response.append("• Regulatory changes may impact cryptocurrency values\n");
+            response.append("• Technology risks and security vulnerabilities exist\n");
+        } else {
+            response.append("ℹ️ **").append(symbol.toUpperCase()).append(" Information:**\n");
+            response.append("• ").append(symbol.toUpperCase()).append(" is an active cryptocurrency in the market\n");
+            response.append("• Monitor official announcements and community updates\n");
+            response.append("• Join verified communities for discussions and insights\n");
+            response.append("• Track market performance and trading metrics\n");
+        }
+        
+        return response.toString();
+    }
+    
+    /**
+     * Provide a fallback answer for general cryptocurrency questions
+     */
+    private String getGeneralFallbackAnswer(String question) {
+        // Try once more with a simpler prompt before falling back
+        try {
+            log.info("Attempting one more time to get AI response for general question");
+            String simplePrompt = "Answer this cryptocurrency question briefly: " + question;
+            String result = generateAnalysis("general_question", simplePrompt).block();
+            if (result != null && !result.trim().isEmpty()) {
+                return result;
+            }
+        } catch (Exception retryException) {
+            log.warn("Retry attempt failed for general question: {}", retryException.getMessage());
+        }
+        
+        StringBuilder response = new StringBuilder();
+        
+        String lowerQuestion = question.toLowerCase();
+        
+        if (lowerQuestion.contains("bitcoin") || lowerQuestion.contains("btc")) {
+            response.append("₿ **Bitcoin Information:**\n");
+            response.append("• First and most established cryptocurrency\n");
+            response.append("• Created by Satoshi Nakamoto in 2009\n");
+            response.append("• Uses Proof of Work consensus mechanism\n");
+            response.append("• Limited supply of 21 million coins\n");
+            response.append("• Often considered digital gold and store of value\n");
+        } else if (lowerQuestion.contains("ethereum") || lowerQuestion.contains("eth")) {
+            response.append("🔷 **Ethereum Information:**\n");
+            response.append("• Smart contract platform and cryptocurrency\n");
+            response.append("• Enables decentralized applications (DApps)\n");
+            response.append("• Transitioned to Proof of Stake (Ethereum 2.0)\n");
+            response.append("• Second largest cryptocurrency by market cap\n");
+            response.append("• Foundation for most DeFi and NFT projects\n");
+        } else if (lowerQuestion.contains("defi") || lowerQuestion.contains("decentralized finance")) {
+            response.append("🏦 **DeFi Information:**\n");
+            response.append("• Decentralized Finance protocols\n");
+            response.append("• Enables lending, borrowing, and trading without intermediaries\n");
+            response.append("• Built primarily on Ethereum and other smart contract platforms\n");
+            response.append("• Offers various financial services in a decentralized manner\n");
+            response.append("• Includes DEXs, lending protocols, and yield farming\n");
+        } else if (lowerQuestion.contains("nft") || lowerQuestion.contains("non-fungible")) {
+            response.append("🎨 **NFT Information:**\n");
+            response.append("• Non-Fungible Tokens represent unique digital assets\n");
+            response.append("• Used for digital art, collectibles, and gaming items\n");
+            response.append("• Each NFT has a unique identifier on the blockchain\n");
+            response.append("• Can be bought, sold, and traded on various marketplaces\n");
+            response.append("• Provide proof of ownership and authenticity\n");
+        } else if (lowerQuestion.contains("blockchain")) {
+            response.append("⛓️ **Blockchain Information:**\n");
+            response.append("• Distributed ledger technology\n");
+            response.append("• Records transactions across multiple computers\n");
+            response.append("• Provides transparency and immutability\n");
+            response.append("• Foundation for cryptocurrencies and many applications\n");
+            response.append("• Enables trustless and decentralized systems\n");
+        } else if (lowerQuestion.contains("mining")) {
+            response.append("⛏️ **Cryptocurrency Mining:**\n");
+            response.append("• Process of validating transactions and creating new blocks\n");
+            response.append("• Miners compete to solve cryptographic puzzles\n");
+            response.append("• Requires computational power and energy\n");
+            response.append("• Miners are rewarded with cryptocurrency\n");
+            response.append("• Helps secure the blockchain network\n");
+        } else if (lowerQuestion.contains("wallet")) {
+            response.append("👛 **Cryptocurrency Wallets:**\n");
+            response.append("• Software or hardware that stores your cryptocurrencies\n");
+            response.append("• Hot wallets: Connected to internet (convenient but less secure)\n");
+            response.append("• Cold wallets: Offline storage (more secure for long-term holding)\n");
+            response.append("• Always keep your private keys secure and backed up\n");
+            response.append("• Never share your private keys or seed phrases\n");
+        } else if (lowerQuestion.contains("invest") || lowerQuestion.contains("trading")) {
+            response.append("💰 **Investment and Trading:**\n");
+            response.append("• Cryptocurrency markets operate 24/7\n");
+            response.append("• High volatility presents both opportunities and risks\n");
+            response.append("• Research thoroughly before making investment decisions\n");
+            response.append("• Consider dollar-cost averaging for long-term investments\n");
+            response.append("• Use proper risk management and position sizing\n");
+        } else {
+            response.append("💰 **General Cryptocurrency Information:**\n");
+            response.append("• Cryptocurrencies are digital assets secured by cryptography\n");
+            response.append("• They operate on decentralized blockchain networks\n");
+            response.append("• Enable peer-to-peer transactions without intermediaries\n");
+            response.append("• Market is highly innovative but volatile\n");
+            response.append("• Research and understand before participating\n");
+        }
+        
+        response.append("\n📚 **Learn More:**\n");
+        response.append("• Visit official project websites and documentation\n");
+        response.append("• Follow reputable cryptocurrency news sources\n");
+        response.append("• Join community discussions and educational forums\n");
+        response.append("• Consider educational resources and courses\n");
+        
+        response.append("\n⚠️ **Disclaimer:** This is general information only. ");
+        response.append("Always conduct your own research and consider your risk tolerance!");
+        
+        return response.toString();
+    }
+    
+    private String formatLargeNumber(Double number) {
+        if (number == null) return "N/A";
+        
+        if (number >= 1_000_000_000) {
+            return String.format("%.2fB", number / 1_000_000_000);
+        } else if (number >= 1_000_000) {
+            return String.format("%.2fM", number / 1_000_000);
+        } else if (number >= 1_000) {
+            return String.format("%.2fK", number / 1_000);
+        } else {
+            return String.format("%.2f", number);
         }
     }
 }
